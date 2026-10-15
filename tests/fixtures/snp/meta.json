@@ -1,0 +1,13 @@
+{
+  "product": "Milan",
+  "report_data": "8dda378012f1d9f7aa0185600aacceb95c945c5bf12adbd9f8d10e0f973bc50cf0c918efe32db88229b1459a843d89ae",
+  "ark_spki_sha256": "d026e304a6413ed59e813769686cff8005a317ad6539fc231773e1c659131d42",
+  "measurement": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+  "tcb": {
+    "bootloader": 4,
+    "tee": 0,
+    "snp": 22,
+    "microcode": 213
+  },
+  "verify_at": 1792022400.0
+}
