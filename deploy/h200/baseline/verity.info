@@ -1,11 +1,11 @@
 VERITY header information for rootfs.hash
 UUID:            	990a400b-54f1-428b-8a55-ea80b285bcb3
 Hash type:       	1
-Data blocks:     	1359578
+Data blocks:     	1385540
 Data block size: 	4096
-Hash blocks:     	10706
+Hash blocks:     	10911
 Hash block size: 	4096
 Hash algorithm:  	sha256
 Salt:            	7698ee41e191a7b63d5b570304467879157d57f548b6ed4155cd3f2b2a70769e
-Root hash:      	86689b651ddebb8e5b574835b1472e980f6bf7de312492cc7a08a00e2cb6564d
-Hash device size: 	43855872 [bytes]
+Root hash:      	9427e778226aaea56186ddbf36427618d96a796962f5d4dc48d140aaf8c1c721
+Hash device size: 	44695552 [bytes]

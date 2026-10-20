@@ -50,6 +50,13 @@ Paper outline: https://claude.ai/code/artifact/18317d5d-c295-48fa-afb6-cfa2a69d1
   passes in the guest (KBS still in-process). A persistent, untrusted data disk
   (`images/data.qcow2`, mounted rw at `/var/lib/attestrag`; needs `overlayroot=tmpfs:recurse=0`
   or overlayroot hides it behind tmpfs) is ready for the encrypted index. Golden fixture updated.
+- 2026-10-20 (benchmark): `scripts/rag_bench.py` runs RGB (AAAI 2024, en/zh) through the
+  attested client against the live node; `docs/benchmarks.md` has the numbers. hit@4 1.0,
+  answer accuracy 0.94 zh / 0.96 en, negative rejection only 5 % (weak spot). Guest moved to
+  32 vCPUs / 32 llama threads (ingest 0.31 -> 1.8 chunks/s zh, answer 10 s -> 3 s) and
+  llama-chat to `-c 16384 -np 4` (the 4096-token unified KV cache failed under 2 users).
+  Concurrency still collapses 3x with 2+ users on CPU (thread oversubscription); options
+  listed in the doc. Measurement cae8d72f..., e2e 34/34, 61 tests.
 
 ## Open items / next steps
 1. (done on h200 instead of GCP) GCP N2D path still unexercised; Milan VCEK/ARK untested

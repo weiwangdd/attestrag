@@ -75,8 +75,9 @@ With `guest-llm-setup.sh` applied, a boot of the verity image runs the two llama
 and `attestrag-node.service`, which attests to `KBS_URL` (default `http://10.0.2.2:8800`,
 the host as seen through slirp), receives the index key and serves `:8080`. If the KBS is
 down the unit retries every 10 s. Check with `g 'systemctl status attestrag-node'` and
-`g 'journalctl -u attestrag-node -n 20'`. CPU-only: ~1.5 GB of models, 8 vCPUs
-(2 threads embedding, 6 chat).
+`g 'journalctl -u attestrag-node -n 20'`. CPU-only: ~1.5 GB of models, 32 vCPUs
+(32 threads for each llama-server, chat with a 16k unified KV cache for its 4 slots; 8 vCPUs with 2+6 threads
+ingested 0.3 chunks/s and `-c 4096` failed under 2 concurrent users, see docs/benchmarks.md).
 
 ## Vector database (step 3b)
 

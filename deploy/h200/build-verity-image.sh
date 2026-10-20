@@ -8,7 +8,7 @@
 #
 # Usage:  build-verity-image.sh [OUTDIR]        (default: $HOME/snp/images/build-<date>)
 # Env:    SNP=$HOME/snp  SRC_QCOW2=$SNP/images/snpvm.qcow2  SALT=<64 hex> (fixed salt => reproducible root hash)
-#         CPUS=8  VCPU_TYPE=EPYC-v4  OVMF=...  KERNEL=...  INITRD=...
+#         CPUS=32 VCPU_TYPE=EPYC-v4  OVMF=...  KERNEL=...  INITRD=...
 #
 # Outputs in OUTDIR: rootfs.raw rootfs.hash roothash.txt verity.info append.txt
 #                    expected-measurement.txt sha256sums.txt
@@ -20,7 +20,7 @@ SRC_QCOW2=${SRC_QCOW2:-$IMAGES/snpvm.qcow2}
 OVMF=${OVMF:-$SNP/ovmf/2025.11-3ubuntu7.3/usr/share/ovmf/OVMF.amdsev.fd}
 KERNEL=${KERNEL:-$IMAGES/vmlinuz}
 INITRD=${INITRD:-$IMAGES/initrd.verity.img}
-CPUS=${CPUS:-8}
+CPUS=${CPUS:-32}
 VCPU_TYPE=${VCPU_TYPE:-EPYC-v4}
 MEASURE=${MEASURE:-$SNP/venv/bin/sev-snp-measure}
 # Fixed salt + uuid make rootfs.hash and the root hash a pure function of the filesystem content.

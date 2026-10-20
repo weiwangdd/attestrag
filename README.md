@@ -48,6 +48,7 @@ deploy/gcp/  GCP N2D SEV-SNP VM deploy script
 deploy/h200/ self-hosted SEV-SNP CVM: QEMU launcher, reproducible dm-verity image build, reference measurements
 tests/       unit + end-to-end tests, incl. a real Genoa report (fixtures/snp/h200-genoa)
 docs/threat-model.md
+docs/benchmarks.md   RGB benchmark on the h200 CVM (scripts/rag_bench.py)
 ```
 
 ## Run

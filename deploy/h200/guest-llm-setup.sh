@@ -20,7 +20,10 @@ CHAT_FILE=qwen2.5-1.5b-instruct-q4_k_m.gguf
 CHAT_URL=https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/$CHAT_FILE
 CHAT_SHA=6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e
 KBS_URL=${KBS_URL:-http://10.0.2.2:8800}
-EMBED_THREADS=${EMBED_THREADS:-2}; CHAT_THREADS=${CHAT_THREADS:-6}
+# chat: 4 slots sharing a 16k unified KV cache (b11753 defaults to 4 slots; with -c 4096 two
+# concurrent ~2k-token RAG prompts fail with 'failed to find free space in the KV cache')
+# thread counts must match CPUS in launch-snpvm.sh (vCPU count is part of the measurement)
+EMBED_THREADS=${EMBED_THREADS:-32}; CHAT_THREADS=${CHAT_THREADS:-32}
 
 fetch() {  # url dest sha
   if [ -f "$2" ] && echo "$3  $2" | sha256sum -c --status; then echo "ok (cached): $2"; return; fi
@@ -61,7 +64,7 @@ Description=llama.cpp chat server (Qwen2.5-1.5B-Instruct)
 After=local-fs.target
 [Service]
 Environment=LD_LIBRARY_PATH=$LLM/llama
-ExecStart=$LLM/llama/llama-server -m $LLM/models/$CHAT_FILE -c 4096 --host 127.0.0.1 --port 8091 \\
+ExecStart=$LLM/llama/llama-server -m $LLM/models/$CHAT_FILE -c 16384 -np 4 --host 127.0.0.1 --port 8091 \\
   -t $CHAT_THREADS --alias chat --no-webui
 Restart=on-failure
 RestartSec=5
@@ -69,11 +72,13 @@ RestartSec=5
 WantedBy=multi-user.target
 UNIT
 
-cat > /etc/attestrag/node.env <<ENV
+# keep an existing node.env: guest-qdrant-setup.sh prefixes NODE_ARGS and a re-run must not undo that
+[ -f /etc/attestrag/node.env ] || cat > /etc/attestrag/node.env <<ENV
 KBS_URL=$KBS_URL
 DATA_DIR=/var/lib/attestrag
 NODE_ARGS=--embed http://127.0.0.1:8090/v1 --llm http://127.0.0.1:8091/v1 --model chat --embed-model embed
 ENV
+cat /etc/attestrag/node.env
 
 cat > /etc/systemd/system/attestrag-node.service <<UNIT
 [Unit]

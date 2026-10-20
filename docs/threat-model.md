@@ -67,6 +67,9 @@
   backdoored model changes the measurement. What the model *says* is not a
   security property: documents can carry prompt injections and a 1.5B model will
   follow them; answers are grounded only by the retrieved chunks and citations.
+  Measured on RGB (docs/benchmarks.md): retrieval hit@4 = 1.0 and answer accuracy
+  0.94–0.96, but when the answer is absent from the corpus the model refuses only
+  5 % of the time and otherwise answers from pretraining or fabricates.
 - Side channels (cache, ciphertext side channels on SEV, page-fault patterns,
   access-pattern leakage of the vector index), availability/DoS.
 - Qdrant snapshots are whole-collection: `save()` after every ingest is O(index),
