@@ -110,8 +110,18 @@ if "$HOSTPY" -c 'import attestrag' 2>/dev/null; then
     for _ in $(seq 1 20); do curl -fs "http://127.0.0.1:$KBS_PORT/healthz" >/dev/null 2>&1 && break; sleep 0.5; done
   fi
   check "KBS reachable on host :$KBS_PORT" curl -fs "http://127.0.0.1:$KBS_PORT/healthz" -o /dev/null
-  "$G" "sudo pkill -f '[a]ttestrag.node_server'; sudo rm -rf /var/lib/attestrag/e2e" >/dev/null 2>&1
-  "$G" "sudo sh -c 'nohup $PY -m attestrag.node_server --kbs http://10.0.2.2:$KBS_PORT --data-dir /var/lib/attestrag/e2e > /tmp/e2e-node.log 2>&1 &'" >/dev/null 2>&1
+  # local LLM services (step 3) are optional: use them when present
+  LLM_ARGS=""
+  if "$G" 'systemctl is-enabled llama-embed.service' >/dev/null 2>&1; then
+    check "llama-embed.service active in guest" bash -c "$G 'systemctl is-active llama-embed.service' | grep -qx active"
+    check "llama-chat.service active in guest"  bash -c "$G 'systemctl is-active llama-chat.service'  | grep -qx active"
+    check "embedding endpoint answers" bash -c "$G 'curl -fs http://127.0.0.1:8090/v1/models' | grep -q embed"
+    check "chat endpoint answers"      bash -c "$G 'curl -fs http://127.0.0.1:8091/v1/models' | grep -q chat"
+    LLM_ARGS="--embed http://127.0.0.1:8090/v1 --llm http://127.0.0.1:8091/v1 --model chat --embed-model embed"
+  fi
+  # run a private node for the test (own data dir, same port as the service)
+  "$G" "sudo systemctl stop attestrag-node.service 2>/dev/null; sudo pkill -f '[a]ttestrag.node_server'; sudo rm -rf /var/lib/attestrag/e2e" >/dev/null 2>&1
+  "$G" "sudo sh -c 'nohup $PY -m attestrag.node_server --kbs http://10.0.2.2:$KBS_PORT --data-dir /var/lib/attestrag/e2e $LLM_ARGS > /tmp/e2e-node.log 2>&1 &'" >/dev/null 2>&1
   for _ in $(seq 1 60); do curl -fs "http://127.0.0.1:$NODE_PORT/healthz" >/dev/null 2>&1 && break; sleep 1; done
   check "node in guest got its key from the KBS and serves host :$NODE_PORT" \
     curl -fs "http://127.0.0.1:$NODE_PORT/healthz" -o /dev/null
@@ -122,13 +132,19 @@ if "$HOSTPY" -c 'import attestrag' 2>/dev/null; then
   printf 'The VCEK signs SEV-SNP attestation reports.\n\nRisotto needs patience.\n' > "$TMP/doc.txt"
   check "client: encrypted upload accepted" \
     bash -c '"$@" upload "$0" 2>/dev/null | grep -q chunks' "$TMP/doc.txt" "${CLI[@]}" --policy "$TMP/good.json"
-  check "client: sealed answer mentions VCEK" \
-    bash -c '"$@" ask "What signs SNP reports?" 2>/dev/null | grep -q VCEK' _ "${CLI[@]}" --policy "$TMP/good.json"
+  "${CLI[@]}" --policy "$TMP/good.json" ask "What signs SNP reports?" > "$TMP/answer.txt" 2>/dev/null
+  check "client: sealed answer mentions VCEK" grep -q VCEK "$TMP/answer.txt"
+  if [ -n "$LLM_ARGS" ]; then
+    check "node used the local embedding model (OpenAIEmbedder)" \
+      bash -c "$G 'cat /tmp/e2e-node.log' | grep -q 'embedder=OpenAIEmbedder'"
+    check "answer was generated, not the raw chunk" bash -c "! grep -q 'Risotto needs patience' '$TMP/answer.txt'"
+    sed 's/^/      answer: /' "$TMP/answer.txt" | head -4
+  fi
   check "index persisted encrypted on the data disk" \
     bash -c "$G 'ls /var/lib/attestrag/e2e/index.enc && ! grep -aq VCEK /var/lib/attestrag/e2e/index.enc'" 
   check "client with wrong measurement policy refuses to send (exit 3)" \
     bash -c '"$@" upload "$0" >/dev/null 2>&1; [ $? = 3 ]' "$TMP/doc.txt" "${CLI[@]}" --policy "$TMP/bad-measurement.json"
-  "$G" "sudo pkill -f '[a]ttestrag.node_server'; sudo rm -rf /var/lib/attestrag/e2e /tmp/e2e-node.log" >/dev/null 2>&1
+  "$G" "sudo pkill -f '[a]ttestrag.node_server'; sudo rm -rf /var/lib/attestrag/e2e /tmp/e2e-node.log; sudo systemctl start attestrag-node.service 2>/dev/null" >/dev/null 2>&1
   [ "$started_kbs" = 1 ] && kill "$KBS_PID" 2>/dev/null
 else
   echo "SKIP  HTTP flow: attestrag not installed in $HOSTPY (pip install the source tarball into $SNP/venv)"

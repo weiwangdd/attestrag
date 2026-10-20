@@ -27,6 +27,7 @@ Everything below runs as user `weiwang` without sudo (user in `kvm` group, `/dev
 | `build-verity-image.sh [outdir]` | host | golden qcow2 -> `rootfs.raw` + `rootfs.hash` + root hash + expected measurement (fixed salt, reproducible) |
 | `guest-verity-setup.sh` | guest (sudo) | one-time: initramfs hook + local-top script for dm-verity, fstab fixes, rebuild initrd |
 | `e2e-test.sh` | host | end-to-end check of the running guest: SNP active, verity root bound to the expected root hash, data disk rw, PSP-signed measurement == `images/expected-measurement.txt`, demo allowed with the expected policy and denied with a wrong measurement / too-high min TCB. `POLICY=file` to test a given policy, `AUTO_LAUNCH=1` to start the guest |
+| `guest-llm-setup.sh` | guest (sudo) | llama.cpp b11753 + Qwen3-Embedding-0.6B Q8_0 + Qwen2.5-1.5B-Instruct Q4_K_M into `/opt/llm` (sha256-pinned, inside the measured image); systemd units `llama-embed` (:8090), `llama-chat` (:8091), `attestrag-node` (boots into attest -> key -> serve; KBS URL in `/etc/attestrag/node.env`) |
 | `guest-attestrag-setup.sh <src.tgz>` | guest (sudo) | install attestRAG + numpy/cryptography into `/opt/attestrag` (venv), fstab entry for the data disk. Source tarball: `git archive --format=tgz -o attestrag-src.tgz HEAD` |
 | `guest-snpguest-setup.sh` | guest | download `snpguest` v0.10.0 |
 | `guest-attest.sh` | guest (sudo) | fetch an attestation report through configfs-tsm, no external tools |
@@ -66,6 +67,15 @@ g 'sudo nohup /opt/attestrag/venv/bin/python -m attestrag.node_server --kbs http
 ```
 
 `attestrag` is installed into the host's `~/snp/venv` from the same source tarball as the guest.
+
+## Self-starting CVM (step 3)
+
+With `guest-llm-setup.sh` applied, a boot of the verity image runs the two llama-servers
+and `attestrag-node.service`, which attests to `KBS_URL` (default `http://10.0.2.2:8800`,
+the host as seen through slirp), receives the index key and serves `:8080`. If the KBS is
+down the unit retries every 10 s. Check with `g 'systemctl status attestrag-node'` and
+`g 'journalctl -u attestrag-node -n 20'`. CPU-only: ~1.5 GB of models, 8 vCPUs
+(2 threads embedding, 6 chat).
 
 ## Measurement chain
 

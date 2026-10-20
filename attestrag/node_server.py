@@ -13,11 +13,26 @@ import sys
 
 from .attest import CompositeAttester
 from .attest.snp import SnpAttester
-from .embed import HashingEmbedder
+from .embed import HashingEmbedder, OpenAIEmbedder
 from .generate import OpenAICompatibleGenerator, StubGenerator
 from .kbs_client import HttpKBS, KBSClient, KeyReleaseDenied
 from .node import AttestRAGNode, node_routes
 from .transport import JsonServer
+
+
+def _wait_http(url: str, timeout: float) -> None:
+    import time
+    import urllib.request
+    deadline = time.time() + timeout
+    while True:
+        try:
+            urllib.request.urlopen(url, timeout=5).read()
+            return
+        except Exception as e:  # noqa: BLE001
+            if time.time() > deadline:
+                print(f"[node] {url} not ready after {timeout:.0f}s: {e}", file=sys.stderr)
+                sys.exit(4)
+            time.sleep(2)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -26,14 +41,23 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--kbs", required=True, help="KBS base URL, e.g. http://10.0.2.2:8800")
     ap.add_argument("--data-dir", default="/var/lib/attestrag")
     ap.add_argument("--key-id", default="index-dek")
-    ap.add_argument("--llm", help="OpenAI-compatible endpoint for generation (default: extractive stub)")
+    ap.add_argument("--llm", help="OpenAI-compatible /v1 endpoint for generation (default: extractive stub)")
     ap.add_argument("--model", default="local")
-    ap.add_argument("--embed-dim", type=int, default=512)
+    ap.add_argument("--embed", help="OpenAI-compatible /v1 endpoint for embeddings (default: hashing embedder)")
+    ap.add_argument("--embed-model", default="local")
+    ap.add_argument("--embed-dim", type=int, default=512, help="hashing embedder dimension")
+    ap.add_argument("--wait", type=float, default=120.0, help="seconds to wait for --llm/--embed to come up")
     args = ap.parse_args(argv)
 
     attester = CompositeAttester(SnpAttester())
+    for url in (args.llm, args.embed):
+        if url:
+            _wait_http(url.rstrip("/") + "/models", args.wait)
     gen = OpenAICompatibleGenerator(args.llm, model=args.model) if args.llm else StubGenerator()
-    node = AttestRAGNode(attester, KBSClient(HttpKBS(args.kbs), attester), HashingEmbedder(args.embed_dim),
+    emb = OpenAIEmbedder(args.embed, model=args.embed_model) if args.embed else HashingEmbedder(args.embed_dim)
+    print(f"[node] embedder={type(emb).__name__} dim={emb.dim} generator={type(gen).__name__}",
+          file=sys.stderr, flush=True)
+    node = AttestRAGNode(attester, KBSClient(HttpKBS(args.kbs), attester), emb,
                          gen, args.data_dir, index_key_id=args.key_id)
     try:
         node.start()

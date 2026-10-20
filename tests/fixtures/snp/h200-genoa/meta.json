@@ -1,10 +1,10 @@
 {
-  "note": "Real SEV-SNP report from the h200 host (2x EPYC 9554 Genoa, SEV firmware 1.55 build 42), guest built by deploy/h200 (OVMF.amdsev 2025.11, kernel-hashes, dm-verity root, attestRAG 0.0.1 + HTTP transport installed in /opt/attestrag, overlayroot=tmpfs:recurse=0). VCEK fetched from AMD KDS on 2026-10-20; ARK/ASK are the bundled AMD roots.",
+  "note": "Real SEV-SNP report from the h200 host (2x EPYC 9554 Genoa, SEV firmware 1.55 build 42), guest built by deploy/h200 (OVMF.amdsev 2025.11, kernel-hashes, dm-verity root, attestRAG 0.0.1 + HTTP transport in /opt/attestrag, llama.cpp b11753 + Qwen3-Embedding-0.6B + Qwen2.5-1.5B-Instruct in /opt/llm, overlayroot=tmpfs:recurse=0). VCEK fetched from AMD KDS on 2026-10-20; ARK/ASK are the bundled AMD roots.",
   "host": "h200",
   "product": "Genoa",
   "report_version": 5,
   "report_data": "c4b6cc717f85cc5e1ecac189e218c5023acb2e01b1a777297d28f2588b776b5ef84b7df5e60b56f967849f89c66bce4a",
-  "measurement": "385932d52c49377d646e98ba9e5fadedea8e86a8fe5431cf42210d00925c8a5e6397e72cca36d52fc81cca33a4f86bd9",
+  "measurement": "f26718f132b69bbe38fcc02149df5408bbc8693b4e0e53fcbf894f5196058b46316f89cb485b3f84f97470ee88a081ac",
   "tcb": {
     "bootloader": 10,
     "tee": 0,

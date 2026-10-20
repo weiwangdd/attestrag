@@ -33,10 +33,10 @@ attestrag/
   policy/      evidence claims -> allow/deny (measurement, debug, freshness, min TCB, GPU)
   kbs_client/  TEE-side KBS client + in-process reference KBS
   ingest/      parsing + chunking
-  embed/       embedders (offline hashing embedder for now)
+  embed/       embedders: hashing (tests) or any OpenAI-compatible /v1/embeddings (llama-server in the CVM)
   index/       vector index (FAISS or numpy), AES-GCM-encrypted at rest
   retrieve/    top-k retrieval
-  generate/    stub generator / OpenAI-compatible endpoint (llama.cpp server)
+  generate/    extractive stub / OpenAI-compatible chat endpoint (llama-server in the CVM)
   sdk/         client: verify evidence, then encrypted upload/query (+ HTTP transport, CLI)
   node.py      the in-CVM service tying it together (+ HTTP routes)
   transport.py JSON-over-HTTP wire format, stdlib server/client
@@ -113,7 +113,7 @@ sudo python -m attestrag.demo --snp --policy policies/h200-genoa.json
 3. TDX quote verification (DCAP); NVIDIA CC GPU evidence (NRAS / local verifier)
 4. ✅ HTTP transport: KBS outside the CVM, node inside, CLI client (validated on h200). Trustee KBS integration later
 5. Lean specification of the policy engine; differential testing Python ↔ Lean
-6. Local LLM (llama.cpp) inside the CVM; attested remote inference endpoints
+6. ✅ Local models inside the measured CVM image (llama.cpp: Qwen3-Embedding-0.6B + Qwen2.5-1.5B-Instruct, `deploy/h200/guest-llm-setup.sh`); attested remote inference endpoints later
 
 ## License
 

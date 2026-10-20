@@ -40,6 +40,7 @@ done
 pgrep -f "[q]emu-system-x86_64 .*$(basename "$SRC_QCOW2")" >/dev/null && { echo "golden qcow2 is in use by a running VM; power it off first" >&2; exit 1; }
 
 mkdir -p "$OUT"; cd "$OUT"
+chmod u+w rootfs.raw rootfs.hash 2>/dev/null; rm -f rootfs.raw rootfs.hash disk.raw   # outputs of a previous run are read-only
 echo "[1/6] qcow2 -> raw"
 qemu-img convert -O raw "$SRC_QCOW2" disk.raw
 

@@ -54,7 +54,10 @@ Paper outline: https://claude.ai/code/artifact/18317d5d-c295-48fa-afb6-cfa2a69d1
 ## Open items / next steps
 1. (done on h200 instead of GCP) GCP N2D path still unexercised; Milan VCEK/ARK untested
    against a real report.
-2. Plug llama.cpp (CPU, 3–8B quantized) into `generate` for demos.
+2. (done 2026-10-20) llama.cpp in the CVM image: Qwen3-Embedding-0.6B (embeddings, dim 1024)
+   + Qwen2.5-1.5B-Instruct Q4_K_M (generation), both sha256-pinned and measured; the guest
+   boots into attest -> key -> serve via systemd. Bigger models need more vCPUs/RAM (vCPU
+   count is part of the measurement) or the GPU step.
 3. (done 2026-10-20) HTTP transport: `kbs_server` on the h200 host, `node_server` in the guest
    (reaches the host at 10.0.2.2 via slirp), `python -m attestrag.sdk` client; node :8080 is
    forwarded to host :8081. Trustee KBS integration later.

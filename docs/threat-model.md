@@ -62,6 +62,10 @@
 - GPU binding above proves session freshness, not that the GPU is the one
   attached to this CVM over an SPDM-protected link; that needs the CVM to attest
   its GPU session (e.g. NVIDIA CC + measured driver in the CPU measurement).
+- Models: weights and llama.cpp live in the measured image, so a swapped or
+  backdoored model changes the measurement. What the model *says* is not a
+  security property: documents can carry prompt injections and a 1.5B model will
+  follow them; answers are grounded only by the retrieved chunks and citations.
 - Side channels (cache, ciphertext side channels on SEV, page-fault patterns,
   access-pattern leakage of the vector index), availability/DoS.
 - Rollback of the encrypted index to an older version (needs a monotonic
