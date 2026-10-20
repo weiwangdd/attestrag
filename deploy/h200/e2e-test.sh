@@ -1,0 +1,104 @@
+#!/bin/bash
+# End-to-end test of the h200 SEV-SNP CVM. Runs on the host as a normal user (uses ./g).
+#
+#   ./e2e-test.sh                 # guest must be running (or AUTO_LAUNCH=1 to start it)
+#   POLICY=policy.json ./e2e-test.sh   # use a given policy instead of generating one
+#
+# Checks: SNP active in the guest, dm-verity root intact and bound to the expected root
+# hash, persistent data disk rw, PSP-signed measurement == offline sev-snp-measure value,
+# demo passes with the expected policy, demo is denied with a wrong measurement and with
+# a too-high minimum TCB.
+# Env: SNP=$HOME/snp  MIN_TCB_BL=10 MIN_TCB_TEE=0 MIN_TCB_SNP=24 MIN_TCB_UCODE=88
+#      GUEST_POLICY=0x30000  AUTO_LAUNCH=0  BOOT_TIMEOUT=300
+set -uo pipefail
+SNP=${SNP:-$HOME/snp}
+G="$SNP/g"
+IMAGES=$SNP/images
+PY=/opt/attestrag/venv/bin/python
+MIN_TCB_BL=${MIN_TCB_BL:-10}; MIN_TCB_TEE=${MIN_TCB_TEE:-0}; MIN_TCB_SNP=${MIN_TCB_SNP:-24}; MIN_TCB_UCODE=${MIN_TCB_UCODE:-88}
+GUEST_POLICY=${GUEST_POLICY:-0x30000}
+TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+pass=0; fail=0
+ok()   { echo "PASS  $*"; pass=$((pass+1)); }
+bad()  { echo "FAIL  $*"; fail=$((fail+1)); }
+check(){ local name=$1; shift; if "$@"; then ok "$name"; else bad "$name"; fi; }
+
+EXPECTED=$(cat "$IMAGES/expected-measurement.txt")
+ROOTHASH=$(cat "$IMAGES/roothash.txt")
+echo "expected measurement: $EXPECTED"
+echo "expected root hash:   $ROOTHASH"
+
+# --- 0. guest reachable --------------------------------------------------------------
+if ! "$G" true 2>/dev/null; then
+  if [ "${AUTO_LAUNCH:-0}" = 1 ]; then
+    pgrep -f "[q]emu-system-x86_64 -name snpvm" >/dev/null || \
+      (cd "$SNP" && nohup ./launch-snpvm.sh snp </dev/null > snpvm.console.log 2>&1 &)
+    for _ in $(seq 1 $(( ${BOOT_TIMEOUT:-300} / 5 ))); do "$G" true 2>/dev/null && break; sleep 5; done
+  fi
+  "$G" true 2>/dev/null || { echo "guest not reachable (start it: ./launch-snpvm.sh snp)"; exit 2; }
+fi
+ok "guest reachable over ssh"
+
+# --- 1. platform ---------------------------------------------------------------------
+check "SEV-SNP active in guest (dmesg)" \
+  bash -c "$G 'sudo dmesg' | grep -q 'Memory Encryption Features active:.*SEV-SNP'"
+check "dm-verity root intact (dmsetup status vroot ends with V)" \
+  bash -c "$G 'sudo dmsetup status vroot' | grep -qE ' V$'"
+check "kernel cmdline roothash == images/roothash.txt" \
+  bash -c "$G 'cat /proc/cmdline' | grep -q 'roothash=$ROOTHASH'"
+check "cmdline has overlayroot=tmpfs:recurse=0" \
+  bash -c "$G 'cat /proc/cmdline' | grep -q 'overlayroot=tmpfs:recurse=0'"
+check "root is read-only verity device" \
+  bash -c "$G 'findmnt -no SOURCE,OPTIONS /media/root-ro' | grep -qE '^/dev/mapper/vroot .*\bro\b'"
+
+# --- 2. data disk --------------------------------------------------------------------
+check "data disk mounted rw at /var/lib/attestrag" \
+  bash -c "$G 'findmnt -no SOURCE,OPTIONS /var/lib/attestrag' | grep -qE '^/dev/vd[a-z] .*\brw\b'"
+STAMP="e2e-$(date +%s)-$$"
+check "data disk writable" \
+  bash -c "$G 'echo $STAMP > /var/lib/attestrag/.e2e && sync && cat /var/lib/attestrag/.e2e' | grep -qx '$STAMP'"
+
+# --- 3. measurement: PSP-signed report vs offline value --------------------------------
+REPORT=$("$G" "sudo $PY -c '
+from attestrag.attest.snp import SnpAttester, SnpReport
+r = SnpReport.parse(SnpAttester().attest(b\"e2e\").report)
+print(r.measurement.hex(), hex(r.policy), r.version, r.vmpl, int(r.debug))'" 2>/dev/null)
+read -r M POL VER VMPL DBG <<<"$REPORT"
+echo "report: measurement=$M policy=$POL version=$VER vmpl=$VMPL debug=$DBG"
+check "report measurement == expected (sev-snp-measure)" [ "$M" = "$EXPECTED" ]
+check "report guest policy == $GUEST_POLICY" [ "$POL" = "$GUEST_POLICY" ]
+check "report requested at VMPL0, debug off" [ "$VMPL" = 0 ] && [ "$DBG" = 0 ]
+
+# --- 4. policies ----------------------------------------------------------------------
+mkpolicy() {  # $1 out, $2 measurement, $3 min snp
+  cat > "$1" <<JSON
+{"allowed_cpu_platforms": ["sev-snp"], "allowed_measurements": ["$2"],
+ "min_tcb": {"bootloader": $MIN_TCB_BL, "tee": $MIN_TCB_TEE, "snp": $3, "microcode": $MIN_TCB_UCODE},
+ "allowed_guest_policy": ["$GUEST_POLICY"]}
+JSON
+}
+if [ -n "${POLICY:-}" ]; then cp "$POLICY" "$TMP/good.json"; else mkpolicy "$TMP/good.json" "$EXPECTED" "$MIN_TCB_SNP"; fi
+mkpolicy "$TMP/bad-measurement.json" "$(printf '0%.0s' $(seq 1 96))" "$MIN_TCB_SNP"
+mkpolicy "$TMP/bad-tcb.json" "$EXPECTED" 99
+for f in good bad-measurement bad-tcb; do "$G" -c "$TMP/$f.json" "/tmp/e2e-$f.json" >/dev/null; done
+
+run_demo() { "$G" "sudo $PY -m attestrag.demo --snp --policy /tmp/e2e-$1.json" > "$TMP/out-$1.txt" 2>&1; }
+
+run_demo good
+check "demo: KBS releases key to expected measurement" \
+  grep -q "KBS released 'index-dek' to measurement ${EXPECTED:0:24}" "$TMP/out-good.txt"
+check "demo: client verifies node (platform=sev-snp)" grep -q 'client verified node: platform=sev-snp' "$TMP/out-good.txt"
+check "demo: answer produced" grep -q '^answer: ' "$TMP/out-good.txt"
+
+denied() {  # $1 name, $2 expected reason substring
+  grep -q 'KeyReleaseDenied' "$TMP/out-$1.txt" && grep -q "$2" "$TMP/out-$1.txt" && ! grep -q 'KBS released' "$TMP/out-$1.txt"
+}
+run_demo bad-measurement
+check "demo denied: wrong measurement -> KeyReleaseDenied" denied bad-measurement 'measurement not in allow-list'
+run_demo bad-tcb
+check "demo denied: min snp TCB 99 -> KeyReleaseDenied" denied bad-tcb "tcb 'snp'=.* < required 99"
+
+"$G" 'rm -f /var/lib/attestrag/.e2e /tmp/e2e-*.json' >/dev/null 2>&1
+echo "----"
+echo "passed $pass, failed $fail"
+[ "$fail" = 0 ]

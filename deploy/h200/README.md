@@ -26,6 +26,7 @@ Everything below runs as user `weiwang` without sudo (user in `kvm` group, `/dev
 | `g 'cmd'` / `g -c file dest` | host | run a command in / copy a file into the guest (ssh port 2222) |
 | `build-verity-image.sh [outdir]` | host | golden qcow2 -> `rootfs.raw` + `rootfs.hash` + root hash + expected measurement (fixed salt, reproducible) |
 | `guest-verity-setup.sh` | guest (sudo) | one-time: initramfs hook + local-top script for dm-verity, fstab fixes, rebuild initrd |
+| `e2e-test.sh` | host | end-to-end check of the running guest: SNP active, verity root bound to the expected root hash, data disk rw, PSP-signed measurement == `images/expected-measurement.txt`, demo allowed with the expected policy and denied with a wrong measurement / too-high min TCB. `POLICY=file` to test a given policy, `AUTO_LAUNCH=1` to start the guest |
 | `guest-attestrag-setup.sh <src.tgz>` | guest (sudo) | install attestRAG + numpy/cryptography into `/opt/attestrag` (venv), fstab entry for the data disk. Source tarball: `git archive --format=tgz -o attestrag-src.tgz HEAD` |
 | `guest-snpguest-setup.sh` | guest | download `snpguest` v0.10.0 |
 | `guest-attest.sh` | guest (sudo) | fetch an attestation report through configfs-tsm, no external tools |
