@@ -15,7 +15,7 @@ VERITY=${VERITY:-1}   # 1 = dm-verity read-only root (rootfs.raw + rootfs.hash) 
 if [ "$VERITY" = 1 ]; then
   INITRD=$D/images/initrd.verity.img
   ROOTHASH=$(cat $D/images/roothash.txt)
-  APPEND=${APPEND:-"root=/dev/mapper/vroot ro rootflags=noload verity_dev=/dev/vda verity_hash=/dev/vdb roothash=$ROOTHASH overlayroot=tmpfs console=ttyS0"}
+  APPEND=${APPEND:-"root=/dev/mapper/vroot ro rootflags=noload verity_dev=/dev/vda verity_hash=/dev/vdb roothash=$ROOTHASH overlayroot=tmpfs:recurse=0 console=ttyS0"}
   DISKS=(-drive file=$D/images/rootfs.raw,if=none,id=root0,format=raw,readonly=on -device virtio-blk-pci,drive=root0,disable-legacy=on,iommu_platform=true
          -drive file=$D/images/rootfs.hash,if=none,id=hash0,format=raw,readonly=on -device virtio-blk-pci,drive=hash0,disable-legacy=on,iommu_platform=true)
 else
@@ -24,6 +24,10 @@ else
   DISKS=(-drive file="$DISK",if=none,id=disk0,format=qcow2 -device virtio-scsi-pci,id=scsi0,disable-legacy=on,iommu_platform=true -device scsi-hd,drive=disk0)
 fi
 KH=${KH:-on}   # kernel-hashes: on = measure kernel/initrd/cmdline into launch digest
+DATA=${DATA:-$D/images/data.qcow2}   # optional persistent, untrusted data disk (encrypted index lives here)
+if [ -f "$DATA" ]; then
+  DISKS+=(-drive file="$DATA",if=none,id=data0,format=qcow2 -device virtio-blk-pci,drive=data0,serial=attestrag-data,disable-legacy=on,iommu_platform=true)
+fi
 
 MACHINE="q35,accel=kvm"
 EXTRA=()

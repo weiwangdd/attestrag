@@ -71,7 +71,7 @@ veritysetup verify rootfs.raw rootfs.hash "$ROOTHASH"
 echo "      root hash = $ROOTHASH"
 
 echo "[5/6] expected launch measurement"
-APPEND="root=/dev/mapper/vroot ro rootflags=noload verity_dev=/dev/vda verity_hash=/dev/vdb roothash=$ROOTHASH overlayroot=tmpfs console=ttyS0"
+APPEND="root=/dev/mapper/vroot ro rootflags=noload verity_dev=/dev/vda verity_hash=/dev/vdb roothash=$ROOTHASH overlayroot=tmpfs:recurse=0 console=ttyS0"
 echo "$APPEND" > append.txt
 "$MEASURE" --mode snp --vcpus "$CPUS" --vcpu-type "$VCPU_TYPE" --ovmf "$OVMF" \
   --kernel "$KERNEL" --initrd "$INITRD" --append "$APPEND" > expected-measurement.txt
@@ -81,4 +81,4 @@ echo "[6/6] checksums"
 chmod a-w rootfs.raw rootfs.hash
 sha256sum "$OVMF" "$KERNEL" "$INITRD" rootfs.raw rootfs.hash > sha256sums.txt
 echo "done: $OUT"
-echo "to deploy: cp $OUT/{rootfs.raw,rootfs.hash,roothash.txt,expected-measurement.txt} $IMAGES/  (while the VM is stopped)"
+echo "to deploy (VM stopped; previous images are read-only): chmod u+w $IMAGES/rootfs.{raw,hash}; cp $OUT/{rootfs.raw,rootfs.hash,roothash.txt,expected-measurement.txt} $IMAGES/"

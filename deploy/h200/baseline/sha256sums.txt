@@ -1,5 +1,5 @@
-ac27e626b097cf6f9eae09b79fc87fc2d3fb6e99c8d97b27f0603993c06a28bb  /home/weiwang/snp/ovmf/2025.11-3ubuntu7.3/usr/share/ovmf/OVMF.amdsev.fd
-41ba36d860aa0b0cd995f4ca8856d80249b244577e704929b55be13fbd1ebd2f  /home/weiwang/snp/images/vmlinuz
-f2ee15efad942ef7b5b330225a4602cf574ba594a06fa8fbe2e71cf3ec276bc0  /home/weiwang/snp/images/initrd.verity.img
-bffa98fba397ef4135385884e742929c8e872387e9be821795f8ff3bb40f9262  rootfs.raw
-f13e16b9078afe9fdfda8a1b9eeb230f938212b49443b03553967979956e497b  rootfs.hash
+ac27e626b097cf6f9eae09b79fc87fc2d3fb6e99c8d97b27f0603993c06a28bb  ~/snp/ovmf/2025.11-3ubuntu7.3/usr/share/ovmf/OVMF.amdsev.fd
+41ba36d860aa0b0cd995f4ca8856d80249b244577e704929b55be13fbd1ebd2f  ~/snp/images/vmlinuz
+f2ee15efad942ef7b5b330225a4602cf574ba594a06fa8fbe2e71cf3ec276bc0  ~/snp/images/initrd.verity.img
+e04d702c03c1009741ebae8eabe776a01eea5413691e1be19947107e77f57a38  rootfs.raw
+d1afe7d1352d0cf48cb765414f9193e5a86d73be46c5cf896902c11852f8267f  rootfs.hash

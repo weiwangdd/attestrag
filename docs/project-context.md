@@ -44,12 +44,19 @@ Paper outline: https://claude.ai/code/artifact/18317d5d-c295-48fa-afb6-cfa2a69d1
   `deploy/h200/` holds the QEMU launcher and a reproducible dm-verity image build;
   `policies/h200-genoa.json` the resulting policy; `tests/fixtures/snp/h200-genoa/` the
   real report as a golden test. 49 tests pass.
+- 2026-10-20 (later): attestRAG itself runs inside the h200 CVM. `deploy/h200/guest-attestrag-setup.sh`
+  installs the package + numpy/cryptography into `/opt/attestrag` of the golden image; the
+  verity image was rebuilt (measurement 7e72a5b7...), `demo --snp --policy policies/h200-genoa.json`
+  passes in the guest (KBS still in-process). A persistent, untrusted data disk
+  (`images/data.qcow2`, mounted rw at `/var/lib/attestrag`; needs `overlayroot=tmpfs:recurse=0`
+  or overlayroot hides it behind tmpfs) is ready for the encrypted index. Golden fixture updated.
 
 ## Open items / next steps
 1. (done on h200 instead of GCP) GCP N2D path still unexercised; Milan VCEK/ARK untested
    against a real report.
 2. Plug llama.cpp (CPU, 3–8B quantized) into `generate` for demos.
-3. HTTP transport for KBS/node; Trustee KBS integration.
+3. HTTP transport for KBS/node (node in the h200 guest, KBS on the host or a laptop,
+   over the hostfwd port); Trustee KBS integration later.
 4. Index rollback protection (version counter in KBS).
 5. TDX (DCAP) verifier; NVIDIA CC GPU evidence verification; benchmark CC-mode overhead.
 6. Lean specification of the policy engine; Python ↔ Lean differential tests.

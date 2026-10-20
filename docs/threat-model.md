@@ -45,7 +45,9 @@
 - Side channels (cache, ciphertext side channels on SEV, page-fault patterns,
   access-pattern leakage of the vector index), availability/DoS.
 - Rollback of the encrypted index to an older version (needs a monotonic
-  counter or version bound in the KBS).
+  counter or version bound in the KBS). On h200 the index lives on a plain
+  host-provided ext4 disk (`/var/lib/attestrag`): its filesystem metadata is
+  untrusted input to the guest kernel, and the host can roll it back or wipe it.
 - Remote inference APIs are not yet attested before use.
 - Measured boot covers userspace only on the self-hosted image (`deploy/h200`);
   the GCP image is not yet built this way. Guest writes are ephemeral (tmpfs overlay),

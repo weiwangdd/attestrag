@@ -15,6 +15,7 @@ Everything below runs as user `weiwang` without sudo (user in `kvm` group, `/dev
 | `images/vmlinuz`, `images/initrd.verity.img` | guest kernel + initrd with dm-verity hook, extracted from the guest |
 | `images/rootfs.raw`, `images/rootfs.hash`, `images/roothash.txt` | dm-verity read-only root + hash tree |
 | `images/seed.img` | cloud-init NoCloud seed (ssh key for `ubuntu`) |
+| `images/data.qcow2` | persistent, untrusted data disk (virtio serial `attestrag-data`, mounted at `/var/lib/attestrag`; holds the AES-GCM encrypted index). Format once from the guest: `sudo mkfs.ext4 -L attestrag-data /dev/disk/by-id/virtio-attestrag-data` |
 | `snpvm_key` | ssh key for the guest |
 
 ## Scripts
@@ -25,6 +26,7 @@ Everything below runs as user `weiwang` without sudo (user in `kvm` group, `/dev
 | `g 'cmd'` / `g -c file dest` | host | run a command in / copy a file into the guest (ssh port 2222) |
 | `build-verity-image.sh [outdir]` | host | golden qcow2 -> `rootfs.raw` + `rootfs.hash` + root hash + expected measurement (fixed salt, reproducible) |
 | `guest-verity-setup.sh` | guest (sudo) | one-time: initramfs hook + local-top script for dm-verity, fstab fixes, rebuild initrd |
+| `guest-attestrag-setup.sh <src.tgz>` | guest (sudo) | install attestRAG + numpy/cryptography into `/opt/attestrag` (venv), fstab entry for the data disk. Source tarball: `git archive --format=tgz -o attestrag-src.tgz HEAD` |
 | `guest-snpguest-setup.sh` | guest | download `snpguest` v0.10.0 |
 | `guest-attest.sh` | guest (sudo) | fetch an attestation report through configfs-tsm, no external tools |
 | `guest-verify.sh` | guest | request report, fetch ARK/ASK/VCEK from AMD KDS, verify chain + signature |
@@ -34,11 +36,22 @@ Typical cycle after changing the guest image:
 ```
 VERITY=0 ./launch-snpvm.sh snp      # boot writable golden image, make changes, `sudo poweroff`
 ./build-verity-image.sh             # new rootfs.raw/.hash/roothash/measurement in images/build-<ts>/
+chmod u+w images/rootfs.{raw,hash}   # outputs are read-only
 cp images/build-<ts>/{rootfs.raw,rootfs.hash,roothash.txt,expected-measurement.txt} images/
 ./launch-snpvm.sh snp               # boot the verity image
 ```
 
+The guest image never contains the policy (it would have to include its own measurement);
+the verifier side supplies it. To run the in-guest demo against the published policy:
+
+```
+g -c ../../policies/h200-genoa.json /tmp/policy.json
+g 'sudo /opt/attestrag/venv/bin/python -m attestrag.demo --snp --policy /tmp/policy.json'
+```
+
 If the guest kernel changes, re-extract `vmlinuz` and `initrd.verity.img` from the guest first (they are part of the measurement).
+
+The launcher passes `-no-reboot`: a `reboot` inside the guest ends the QEMU process; start it again from the host. Stop with `pkill -f "[q]emu-system-x86_64 -name snpvm"` (the bracket keeps pkill from matching its own ssh session).
 
 ## Measurement chain
 
