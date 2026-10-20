@@ -260,3 +260,22 @@ def test_configfs_wrong_provider(tmp_path):
 def test_configfs_missing(tmp_path):
     with pytest.raises(AttestationError, match="configfs-tsm"):
         SnpAttester(tmp_path / "nope").attest(RD)
+
+
+def test_demo_dump_captures_raw_evidence(tmp_path, amd, monkeypatch):
+    from cryptography.hazmat.primitives import serialization
+    from attestrag import demo
+    key, vcek = amd.make_vcek(b"\xc1" * 64, DEFAULT_TCB)
+    vcek_der = vcek.public_bytes(serialization.Encoding.DER)
+    raw = build_report(key, RD)
+    aux = _cert_table([(str(snp.GUID_VCEK), vcek_der)])
+    monkeypatch.setattr(snp, "SnpAttester", lambda: FakeTsm(tmp_path / "tsm", raw, aux=aux))
+    (tmp_path / "tsm").mkdir()
+    out = tmp_path / "cap"
+    demo.dump_snp_evidence(out, RD, None)
+    meta = json.loads((out / "meta.json").read_text())
+    assert (out / "report.bin").read_bytes() == raw
+    assert (out / "vcek.der").read_bytes() == vcek_der and meta["vcek_source"] == "auxblob"
+    assert meta["errors"] == [] and meta["product"] == "Milan" and meta["tcb"] == DEFAULT_TCB
+    assert meta["report_data"] == RD.hex()
+    assert len(x509.load_pem_x509_certificates((out / "ask_ark.pem").read_bytes())) == 2

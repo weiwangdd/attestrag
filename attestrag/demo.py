@@ -2,6 +2,7 @@
 
     python -m attestrag.demo                    # mock attestation, runs anywhere
     sudo python -m attestrag.demo --snp         # real SEV-SNP inside an SNP CVM
+    sudo python -m attestrag.demo --snp --dump snp-capture   # also save raw evidence
 
 In --snp mode the KBS still runs in-process (inside the same CVM), which proves
 the plumbing but is NOT a meaningful trust setup: in production the KBS runs in
@@ -16,6 +17,8 @@ import json
 import os
 import sys
 import tempfile
+import time
+from pathlib import Path
 
 from .attest import CompositeAttester, CompositeVerifier, Platform, cpu_report_data
 from .common.crypto import new_key
@@ -67,9 +70,58 @@ def mock_main() -> None:
     run_flow(attester, CompositeVerifier({Platform.MOCK_CPU: mv, Platform.MOCK_GPU: mv}), policy)
 
 
-def snp_main(policy_path: str | None, product: str | None) -> None:
+def dump_snp_evidence(out: Path, rd: bytes, product: str | None) -> None:
+    """Capture one raw SNP report plus its AMD chain in the tests/fixtures/snp layout.
+
+    Written before verification, and best-effort per file, so a report the
+    verifier rejects can still be brought home and debugged offline.
+    """
+    from cryptography.hazmat.primitives import serialization
+
+    from .attest import snp
+
+    out.mkdir(parents=True, exist_ok=True)
+    ev = snp.SnpAttester().attest(rd)
+    (out / "report.bin").write_bytes(ev.report)
+    (out / "evidence.json").write_text(ev.to_json() + "\n")
+    meta: dict = {"report_data": rd.hex(), "verify_at": time.time(), "vcek_source": None}
+    errors = []
+    try:
+        r = snp.SnpReport.parse(ev.report)
+        p = (snp.product_from_cpuid(r.cpuid_fam, r.cpuid_mod) if r.version >= 3 else None) or product
+        meta.update(product=p, report_version=r.version, measurement=r.measurement.hex(),
+                    vmpl=r.vmpl, debug=r.debug, policy=hex(r.policy), signing_key=r.signing_key,
+                    mask_chip_key=r.mask_chip_key, chip_id=r.chip_id.hex(),
+                    cpuid=[r.cpuid_fam, r.cpuid_mod] if r.version >= 3 else None,
+                    reported_tcb=hex(r.reported_tcb), current_tcb=hex(r.current_tcb),
+                    committed_tcb=hex(r.committed_tcb), launch_tcb=hex(r.launch_tcb))
+        if p:
+            meta["tcb"] = snp.decode_tcb(r.reported_tcb, p)
+            meta["ark_spki_sha256"] = snp.ARK_SPKI_SHA256.get(p)
+            kds = snp.KdsClient()
+            ask, ark = kds.cert_chain(p)
+            (out / "ask_ark.pem").write_bytes(ask.public_bytes(serialization.Encoding.PEM)
+                                              + ark.public_bytes(serialization.Encoding.PEM))
+            if ev.cert_chain:
+                (out / "vcek.der").write_bytes(ev.cert_chain[0])
+                meta["vcek_source"] = "auxblob"
+            else:
+                meta["vcek_url"] = kds.vcek_url(p, r.chip_id, meta["tcb"])
+                vcek = kds.vcek(p, r.chip_id, meta["tcb"])
+                (out / "vcek.der").write_bytes(vcek.public_bytes(serialization.Encoding.DER))
+                meta["vcek_source"] = "kds"
+    except Exception as e:  # keep whatever was captured
+        errors.append(f"{type(e).__name__}: {e}")
+    meta["errors"] = errors
+    (out / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
+    print(f"captured SNP evidence in {out}" + (f" (errors: {errors})" if errors else ""))
+
+
+def snp_main(policy_path: str | None, product: str | None, dump: str | None = None) -> None:
     from .attest.snp import SnpAttester, SnpVerifier
 
+    if dump:
+        dump_snp_evidence(Path(dump), cpu_report_data(os.urandom(32), bytes(32)), product)
     attester = CompositeAttester(SnpAttester())
     verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(product=product)})
     if policy_path:
@@ -97,9 +149,10 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--policy", help="policy JSON file (SNP mode)")
     ap.add_argument("--product", choices=["Milan", "Genoa", "Turin"],
                     help="AMD product, needed only if the report lacks CPUID fields")
+    ap.add_argument("--dump", metavar="DIR", help="SNP mode: save a raw report + AMD certs to DIR first")
     args = ap.parse_args(argv)
     if args.snp:
-        snp_main(args.policy, args.product)
+        snp_main(args.policy, args.product, args.dump)
     else:
         mock_main()
 

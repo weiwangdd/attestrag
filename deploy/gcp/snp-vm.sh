@@ -3,6 +3,7 @@
 #
 #   deploy/gcp/snp-vm.sh up      create the VM (Spot by default), install, run tests + SNP demo
 #   deploy/gcp/snp-vm.sh demo    re-sync the working tree and re-run the SNP demo
+#   (up/demo copy the raw SNP report + AMD certs back to deploy/gcp/out/<time>/)
 #   deploy/gcp/snp-vm.sh ssh     open a shell on the VM
 #   deploy/gcp/snp-vm.sh status  show the VM
 #   deploy/gcp/snp-vm.sh down    delete the VM (stop paying)
@@ -94,9 +95,23 @@ sudo modprobe sev-guest 2>/dev/null || true
 mountpoint -q /sys/kernel/config || sudo mount -t configfs none /sys/kernel/config
 sudo dmesg | grep -i -m3 'SEV-SNP' || true
 ls -d /sys/kernel/config/tsm/report || { echo 'configfs-tsm missing: need kernel >= 6.7 with CONFIG_TSM_REPORTS'; exit 1; }
-sudo .venv/bin/python -m attestrag.demo --snp --product Milan
+rm -rf snp-capture
+rc=0
+sudo .venv/bin/python -m attestrag.demo --snp --product Milan --dump snp-capture || rc=\$?
+sudo chown -R "\$(id -u):\$(id -g)" snp-capture 2>/dev/null || true
+exit \$rc
 REMOTE
-)"
+)" || rc=$?
+  fetch_capture
+  return "${rc:-0}"
+}
+
+fetch_capture() {
+  local dest="$ROOT/deploy/gcp/out/$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$dest"
+  run gcloud compute scp --recurse "$NAME:$REMOTE_DIR/snp-capture/*" "$dest/" "${G[@]}" \
+    && echo "SNP capture saved to $dest" \
+    || echo "warning: could not copy snp-capture back from the VM" >&2
 }
 
 case "${1:-}" in
