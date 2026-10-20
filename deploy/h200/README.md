@@ -54,6 +54,19 @@ If the guest kernel changes, re-extract `vmlinuz` and `initrd.verity.img` from t
 
 The launcher passes `-no-reboot`: a `reboot` inside the guest ends the QEMU process; start it again from the host. Stop with `pkill -f "[q]emu-system-x86_64 -name snpvm"` (the bracket keeps pkill from matching its own ssh session).
 
+## KBS outside, node inside (step 2)
+
+```
+# host: KBS with the published policy; keys persisted in ~/snp/kbs-keys.json (0600)
+~/snp/venv/bin/python -m attestrag.kbs_server --policy policy-h200.json --keys ~/snp/kbs-keys.json --listen 127.0.0.1:8800
+# guest: node attests to the KBS (host is 10.0.2.2 from inside slirp), serves :8080 -> host :8081
+g 'sudo nohup /opt/attestrag/venv/bin/python -m attestrag.node_server --kbs http://10.0.2.2:8800 --data-dir /var/lib/attestrag > /tmp/node.log 2>&1 &'
+# host (or anywhere that can reach :8081): client verifies, then uploads / asks
+~/snp/venv/bin/python -m attestrag.sdk --node http://127.0.0.1:8081 --policy policy-h200.json ask "..."
+```
+
+`attestrag` is installed into the host's `~/snp/venv` from the same source tarball as the guest.
+
 ## Measurement chain
 
 PSP signs the launch digest over: OVMF + initial vCPU state (count, model) + kernel-hashes table (vmlinuz, initrd, cmdline).

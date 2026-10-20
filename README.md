@@ -37,8 +37,11 @@ attestrag/
   index/       vector index (FAISS or numpy), AES-GCM-encrypted at rest
   retrieve/    top-k retrieval
   generate/    stub generator / OpenAI-compatible endpoint (llama.cpp server)
-  sdk/         client: verify evidence, then encrypted upload/query
-  node.py      the in-CVM service tying it together
+  sdk/         client: verify evidence, then encrypted upload/query (+ HTTP transport, CLI)
+  node.py      the in-CVM service tying it together (+ HTTP routes)
+  transport.py JSON-over-HTTP wire format, stdlib server/client
+  kbs_server.py   KBS as an HTTP service (runs outside the CVM)
+  node_server.py  node as an HTTP service (runs inside the CVM)
   demo.py      local end-to-end demo
 policies/    reference key-release policies (h200-genoa.json: measurement allow-list, min TCB, guest policy)
 deploy/gcp/  GCP N2D SEV-SNP VM deploy script
@@ -72,6 +75,25 @@ deploy/gcp/snp-vm.sh down                           # delete when done
 
 `DRY_RUN=1 deploy/gcp/snp-vm.sh up` prints the gcloud commands without running them.
 
+## Three processes: KBS outside, node inside, client anywhere
+
+```bash
+# data owner's machine (outside the CVM): holds the keys, enforces the policy
+python -m attestrag.kbs_server --policy policies/h200-genoa.json --keys kbs-keys.json --listen 0.0.0.0:8800
+
+# inside the SEV-SNP guest (root): attests to the KBS, gets the index key, serves the RAG API
+sudo python -m attestrag.node_server --kbs http://<kbs-host>:8800 --data-dir /var/lib/attestrag
+
+# client: verifies the node's evidence against its own policy before sending anything
+python -m attestrag.sdk --node http://<node>:8080 --policy policies/h200-genoa.json upload doc.md
+python -m attestrag.sdk --node http://<node>:8080 --policy policies/h200-genoa.json ask "..."
+```
+
+Documents and questions are encrypted to the X25519 key bound into the node's report; the
+answer is sealed with a one-time key carried inside the encrypted question, so only the
+attested node can produce an answer the client accepts. No TLS is needed for that, but a
+deployment may add it for metadata privacy.
+
 ## Real SEV-SNP on your own host
 
 `deploy/h200/` runs a CPU-only SNP guest with QEMU directly (no libvirt), measures the
@@ -89,7 +111,7 @@ sudo python -m attestrag.demo --snp --policy policies/h200-genoa.json
 1. ✅ Mock end-to-end: verify → release key → encrypted ingest → retrieve → generate
 2. ✅ SEV-SNP attester + verifier validated on real hardware (EPYC Genoa, `deploy/h200`); reference measurement + policy published (`policies/h200-genoa.json`); GCP N2D still untested
 3. TDX quote verification (DCAP); NVIDIA CC GPU evidence (NRAS / local verifier)
-4. HTTP transport; integrate with Trustee KBS (reproducible dm-verity CVM image + published measurement: done for h200)
+4. ✅ HTTP transport: KBS outside the CVM, node inside, CLI client (validated on h200). Trustee KBS integration later
 5. Lean specification of the policy engine; differential testing Python ↔ Lean
 6. Local LLM (llama.cpp) inside the CVM; attested remote inference endpoints
 

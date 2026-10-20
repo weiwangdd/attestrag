@@ -9,6 +9,7 @@ SEED=$D/images/seed.img
 MEM=${MEM:-16G}
 CPUS=${CPUS:-8}
 SSH_PORT=${SSH_PORT:-2222}
+NODE_PORT=${NODE_PORT:-8081}   # host port forwarded to the node service (guest :8080)
 MODE=${1:-snp}; [ $# -gt 0 ] && shift   # snp | plain
 KERNEL=$D/images/vmlinuz
 VERITY=${VERITY:-1}   # 1 = dm-verity read-only root (rootfs.raw + rootfs.hash) with tmpfs overlayroot; 0 = plain qcow2 root
@@ -45,7 +46,7 @@ exec "$QEMU" \
   -kernel "$KERNEL" -initrd "$INITRD" -append "$APPEND" \
   "${DISKS[@]}" \
   -drive file="$SEED",if=none,id=seed0,format=raw,readonly=on -device virtio-blk-pci,drive=seed0,disable-legacy=on,iommu_platform=true \
-  -netdev user,id=net0,hostfwd=tcp::${SSH_PORT}-:22 -device virtio-net-pci,netdev=net0,disable-legacy=on,iommu_platform=true,romfile= \
+  -netdev user,id=net0,hostfwd=tcp::${SSH_PORT}-:22,hostfwd=tcp::${NODE_PORT}-:8080 -device virtio-net-pci,netdev=net0,disable-legacy=on,iommu_platform=true,romfile= \
   -device virtio-rng-pci,disable-legacy=on,iommu_platform=true \
   -nographic -serial mon:stdio -no-reboot \
   "${EXTRA[@]}" "$@"

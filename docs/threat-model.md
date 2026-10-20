@@ -28,6 +28,7 @@
 | GPU evidence spliced from another session | GPU `report_data = H(label ‖ cpu_report_data)` |
 | Host reads/edits index on disk | AES-256-GCM with AAD (format, dim); tamper ⇒ load fails |
 | Client data sent to impostor node | SDK verifies evidence + policy before any upload; data encrypted to the attested transport key |
+| Answer forged or swapped on the network | answer sealed (AES-GCM) with a one-time key the client put inside the question encrypted to the attested node key; a forger cannot know it |
 | Host swaps kernel, initrd, cmdline or any file on the root filesystem | `kernel-hashes` puts kernel/initrd/cmdline in the launch measurement; the cmdline carries the dm-verity root hash of a read-only rootfs, so the whole boot chain is one measurement (`deploy/h200`, reproducible build) |
 
 ## Known gaps / out of scope (for now)
@@ -49,6 +50,8 @@
   host-provided ext4 disk (`/var/lib/attestrag`): its filesystem metadata is
   untrusted input to the guest kernel, and the host can roll it back or wipe it.
 - Remote inference APIs are not yet attested before use.
+- HTTP without TLS: metadata (doc ids, sizes, timing, error reasons from the KBS) is
+  visible to the network; `ingest`'s chunk count reply is unauthenticated.
 - Measured boot covers userspace only on the self-hosted image (`deploy/h200`);
   the GCP image is not yet built this way. Guest writes are ephemeral (tmpfs overlay),
   so persistent state must come through the attested KBS/index path.

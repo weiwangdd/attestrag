@@ -55,8 +55,9 @@ Paper outline: https://claude.ai/code/artifact/18317d5d-c295-48fa-afb6-cfa2a69d1
 1. (done on h200 instead of GCP) GCP N2D path still unexercised; Milan VCEK/ARK untested
    against a real report.
 2. Plug llama.cpp (CPU, 3–8B quantized) into `generate` for demos.
-3. HTTP transport for KBS/node (node in the h200 guest, KBS on the host or a laptop,
-   over the hostfwd port); Trustee KBS integration later.
+3. (done 2026-10-20) HTTP transport: `kbs_server` on the h200 host, `node_server` in the guest
+   (reaches the host at 10.0.2.2 via slirp), `python -m attestrag.sdk` client; node :8080 is
+   forwarded to host :8081. Trustee KBS integration later.
 4. Index rollback protection (version counter in KBS).
 5. TDX (DCAP) verifier; NVIDIA CC GPU evidence verification; benchmark CC-mode overhead.
 6. Lean specification of the policy engine; Python ↔ Lean differential tests.

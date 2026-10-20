@@ -24,7 +24,9 @@ tar xzf "$SRC" -C "$PREFIX/src"
 python3 -m venv "$PREFIX/venv"
 "$PREFIX/venv/bin/pip" install -q --upgrade pip
 "$PREFIX/venv/bin/pip" install -q "$PREFIX/src" pytest
-printf '#!/bin/sh\nexec %s/venv/bin/python "$@"\n' "$PREFIX" > /usr/local/bin/attestrag-python && chmod 755 /usr/local/bin/attestrag-python   # a symlink would defeat venv detection
+rm -f /usr/local/bin/attestrag-python   # never write through an old symlink (it points at the system python)
+printf '#!/bin/sh\nexec %s/venv/bin/python "$@"\n' "$PREFIX" > /usr/local/bin/attestrag-python
+chmod 755 /usr/local/bin/attestrag-python   # a symlink would defeat venv detection
 
 mkdir -p /var/lib/attestrag
 grep -q attestrag-data /etc/fstab || \

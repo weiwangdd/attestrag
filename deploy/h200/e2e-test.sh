@@ -98,6 +98,42 @@ check "demo denied: wrong measurement -> KeyReleaseDenied" denied bad-measuremen
 run_demo bad-tcb
 check "demo denied: min snp TCB 99 -> KeyReleaseDenied" denied bad-tcb "tcb 'snp'=.* < required 99"
 
+# --- 5. three processes over HTTP: KBS on the host, node in the guest, client on the host ---------
+HOSTPY=$SNP/venv/bin/python
+KBS_PORT=${KBS_PORT:-8800}; NODE_PORT=${NODE_PORT:-8081}
+if "$HOSTPY" -c 'import attestrag' 2>/dev/null; then
+  started_kbs=0
+  if ! curl -fs "http://127.0.0.1:$KBS_PORT/healthz" >/dev/null 2>&1; then
+    nohup "$HOSTPY" -m attestrag.kbs_server --policy "$TMP/good.json" --keys "$SNP/kbs-keys.json" \
+      --listen "127.0.0.1:$KBS_PORT" > "$TMP/kbs.log" 2>&1 &
+    KBS_PID=$!; started_kbs=1
+    for _ in $(seq 1 20); do curl -fs "http://127.0.0.1:$KBS_PORT/healthz" >/dev/null 2>&1 && break; sleep 0.5; done
+  fi
+  check "KBS reachable on host :$KBS_PORT" curl -fs "http://127.0.0.1:$KBS_PORT/healthz" -o /dev/null
+  "$G" "sudo pkill -f '[a]ttestrag.node_server'; sudo rm -rf /var/lib/attestrag/e2e" >/dev/null 2>&1
+  "$G" "sudo sh -c 'nohup $PY -m attestrag.node_server --kbs http://10.0.2.2:$KBS_PORT --data-dir /var/lib/attestrag/e2e > /tmp/e2e-node.log 2>&1 &'" >/dev/null 2>&1
+  for _ in $(seq 1 60); do curl -fs "http://127.0.0.1:$NODE_PORT/healthz" >/dev/null 2>&1 && break; sleep 1; done
+  check "node in guest got its key from the KBS and serves host :$NODE_PORT" \
+    curl -fs "http://127.0.0.1:$NODE_PORT/healthz" -o /dev/null
+  "$G" 'cat /tmp/e2e-node.log' 2>/dev/null | sed 's/^/      node: /' | head -3
+  CLI=("$HOSTPY" -m attestrag.sdk --node "http://127.0.0.1:$NODE_PORT")
+  check "client: evidence verified against expected policy" \
+    bash -c '"$@" verify >/dev/null 2>"$0"' "$TMP/cli.err" "${CLI[@]}" --policy "$TMP/good.json"
+  printf 'The VCEK signs SEV-SNP attestation reports.\n\nRisotto needs patience.\n' > "$TMP/doc.txt"
+  check "client: encrypted upload accepted" \
+    bash -c '"$@" upload "$0" 2>/dev/null | grep -q chunks' "$TMP/doc.txt" "${CLI[@]}" --policy "$TMP/good.json"
+  check "client: sealed answer mentions VCEK" \
+    bash -c '"$@" ask "What signs SNP reports?" 2>/dev/null | grep -q VCEK' _ "${CLI[@]}" --policy "$TMP/good.json"
+  check "index persisted encrypted on the data disk" \
+    bash -c "$G 'ls /var/lib/attestrag/e2e/index.enc && ! grep -aq VCEK /var/lib/attestrag/e2e/index.enc'" 
+  check "client with wrong measurement policy refuses to send (exit 3)" \
+    bash -c '"$@" upload "$0" >/dev/null 2>&1; [ $? = 3 ]' "$TMP/doc.txt" "${CLI[@]}" --policy "$TMP/bad-measurement.json"
+  "$G" "sudo pkill -f '[a]ttestrag.node_server'; sudo rm -rf /var/lib/attestrag/e2e /tmp/e2e-node.log" >/dev/null 2>&1
+  [ "$started_kbs" = 1 ] && kill "$KBS_PID" 2>/dev/null
+else
+  echo "SKIP  HTTP flow: attestrag not installed in $HOSTPY (pip install the source tarball into $SNP/venv)"
+fi
+
 "$G" 'rm -f /var/lib/attestrag/.e2e /tmp/e2e-*.json' >/dev/null 2>&1
 echo "----"
 echo "passed $pass, failed $fail"

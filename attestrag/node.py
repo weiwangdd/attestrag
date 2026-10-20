@@ -3,6 +3,9 @@
 Boot:   prove to KBS -> receive index DEK -> open encrypted index.
 Serve:  attestation(nonce) for clients; ingest/query over payloads encrypted to
         the node's transport key, whose public half is bound into every report.
+        The answer is sealed with a one-time key the client sent inside the
+        encrypted question, so only the node that could decrypt the question
+        (i.e. the attested one) can produce an answer the client accepts.
 """
 
 from __future__ import annotations
@@ -16,7 +19,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from .attest.base import CompositeAttester
 from .attest.binding import cpu_report_data
 from .attest.types import CompositeEvidence
-from .common.crypto import WrappedKey, unwrap, wrap_to, x25519_public_bytes
+from .common.crypto import WrappedKey, seal, unwrap, x25519_public_bytes
 from .embed import Embedder
 from .generate import Generator
 from .index import EncryptedVectorIndex
@@ -82,10 +85,30 @@ class AttestRAGNode:
         index.save(self.index_path, self._dek)
         return len(chunks)
 
-    def query(self, wrapped_question: WrappedKey, reply_pub: bytes, k: int = 4) -> WrappedKey:
+    def query(self, wrapped_question: WrappedKey, k: int = 4) -> bytes:
+        """wrapped_question = wrap_to(node_pub, {"question", "reply_key"}); returns seal(reply_key, answer)."""
         index = self._require_started()
-        question = unwrap(self._transport, wrapped_question, info=QUERY_INFO).decode()
+        req = json.loads(unwrap(self._transport, wrapped_question, info=QUERY_INFO))
+        question, reply_key = req["question"], bytes.fromhex(req["reply_key"])
         hits = Retriever(self.embedder, index).retrieve(question, k)
         answer = self.generator.generate(question, hits)
         payload = json.dumps({"answer": asdict(answer), "hits": [asdict(h) for h in hits]}).encode()
-        return wrap_to(reply_pub, payload, info=ANSWER_INFO)
+        return seal(reply_key, payload, aad=ANSWER_INFO)
+
+
+def node_routes(node: AttestRAGNode) -> dict:
+    """HTTP routes for AttestRAGNode (see transport.JsonServer)."""
+    from .transport import evidence_to_dict, wrapped_from_dict
+
+    def attestation(req: dict) -> dict:
+        ev, pub = node.attestation(bytes.fromhex(req["nonce"]))
+        return {"evidence": evidence_to_dict(ev), "node_pub": pub.hex()}
+
+    def ingest(req: dict) -> dict:
+        n = node.ingest(req["doc_id"], wrapped_from_dict(req["wrapped"]), req.get("content_type", "text/plain"))
+        return {"chunks": n}
+
+    def query(req: dict) -> dict:
+        return {"sealed": node.query(wrapped_from_dict(req["wrapped"]), int(req.get("k", 4))).hex()}
+
+    return {"/attestation": attestation, "/ingest": ingest, "/query": query}

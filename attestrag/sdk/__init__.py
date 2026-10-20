@@ -7,12 +7,10 @@ import os
 import time
 from typing import Protocol
 
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-
 from ..attest.base import CompositeVerifier
 from ..attest.binding import cpu_report_data
 from ..attest.types import CompositeClaims, CompositeEvidence
-from ..common.crypto import WrappedKey, unwrap, wrap_to, x25519_public_bytes
+from ..common.crypto import WrappedKey, new_key, open_sealed, wrap_to
 from ..node import ANSWER_INFO, INGEST_INFO, QUERY_INFO
 from ..policy import Policy, evaluate
 
@@ -24,7 +22,7 @@ class NodeUntrusted(Exception):
 class NodeTransport(Protocol):
     def attestation(self, nonce: bytes) -> tuple[CompositeEvidence, bytes]: ...
     def ingest(self, doc_id: str, wrapped: WrappedKey, content_type: str = ...) -> int: ...
-    def query(self, wrapped_question: WrappedKey, reply_pub: bytes, k: int = ...) -> WrappedKey: ...
+    def query(self, wrapped_question: WrappedKey, k: int = ...) -> bytes: ...
 
 
 class AttestRAGClient:
@@ -58,7 +56,8 @@ class AttestRAGClient:
         return self.node.ingest(doc_id, wrapped, content_type)
 
     def ask(self, question: str, k: int = 4) -> dict:
-        reply = X25519PrivateKey.generate()
-        wq = wrap_to(self._pub(), question.encode(), info=QUERY_INFO)
-        wa = self.node.query(wq, x25519_public_bytes(reply.public_key()), k)
-        return json.loads(unwrap(reply, wa, info=ANSWER_INFO))
+        reply_key = new_key()  # one-time; only the node that can open the question learns it
+        wq = wrap_to(self._pub(), json.dumps({"question": question, "reply_key": reply_key.hex()}).encode(),
+                     info=QUERY_INFO)
+        sealed = self.node.query(wq, k)
+        return json.loads(open_sealed(reply_key, sealed, aad=ANSWER_INFO))
