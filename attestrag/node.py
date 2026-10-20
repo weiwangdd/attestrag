@@ -22,7 +22,7 @@ from .attest.types import CompositeEvidence
 from .common.crypto import WrappedKey, seal, unwrap, x25519_public_bytes
 from .embed import Embedder
 from .generate import Generator
-from .index import EncryptedVectorIndex
+from .index import EncryptedVectorIndex, VectorStore
 from .ingest import chunk_text, parse
 from .kbs_client import KBSClient
 from .retrieve import Retriever
@@ -41,6 +41,7 @@ class AttestRAGNode:
         generator: Generator,
         data_dir: str | Path,
         index_key_id: str = "index-dek",
+        store: VectorStore | None = None,
     ):
         self.attester = attester
         self.kbs = kbs
@@ -51,21 +52,23 @@ class AttestRAGNode:
         self._transport = X25519PrivateKey.generate()
         self.transport_pub = x25519_public_bytes(self._transport.public_key())
         self._dek: bytes | None = None
-        self.index: EncryptedVectorIndex | None = None
+        self._store = store
+        self.index: VectorStore | None = None
 
     @property
     def index_path(self) -> Path:
-        return self.data_dir / "index.enc"
+        return self.data_dir / (self._store.filename if self._store is not None else EncryptedVectorIndex.filename)
 
     def start(self) -> None:
         self._dek = self.kbs.get_key(self.index_key_id)  # raises KeyReleaseDenied
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        if self.index_path.exists():
-            self.index = EncryptedVectorIndex.load(self.index_path, self._dek, self.embedder.dim)
-        else:
-            self.index = EncryptedVectorIndex(self.embedder.dim)
+        store = self._store if self._store is not None else EncryptedVectorIndex(self.embedder.dim)  # no `or`: it would call __len__
+        if store.dim != self.embedder.dim:
+            raise RuntimeError(f"vector store dim {store.dim} != embedder dim {self.embedder.dim}")
+        store.open(self.index_path, self._dek)  # restores sealed state if present
+        self.index = store
 
-    def _require_started(self) -> EncryptedVectorIndex:
+    def _require_started(self) -> VectorStore:
         if self.index is None or self._dek is None:
             raise RuntimeError("node not started (key not released)")
         return self.index

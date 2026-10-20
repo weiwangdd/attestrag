@@ -46,7 +46,11 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--embed", help="OpenAI-compatible /v1 endpoint for embeddings (default: hashing embedder)")
     ap.add_argument("--embed-model", default="local")
     ap.add_argument("--embed-dim", type=int, default=512, help="hashing embedder dimension")
-    ap.add_argument("--wait", type=float, default=120.0, help="seconds to wait for --llm/--embed to come up")
+    ap.add_argument("--wait", type=float, default=120.0, help="seconds to wait for --llm/--embed/--qdrant-url to come up")
+    ap.add_argument("--vector-store", choices=["sealed", "qdrant"], default="sealed",
+                    help="sealed = in-memory index persisted as one AES-GCM blob; qdrant = Qdrant in the CVM (tmpfs storage, sealed snapshots)")
+    ap.add_argument("--qdrant-url", default="http://127.0.0.1:6333")
+    ap.add_argument("--qdrant-collection", default="attestrag")
     args = ap.parse_args(argv)
 
     attester = CompositeAttester(SnpAttester())
@@ -57,8 +61,15 @@ def main(argv: list[str] | None = None) -> None:
     emb = OpenAIEmbedder(args.embed, model=args.embed_model) if args.embed else HashingEmbedder(args.embed_dim)
     print(f"[node] embedder={type(emb).__name__} dim={emb.dim} generator={type(gen).__name__}",
           file=sys.stderr, flush=True)
+    store = None
+    if args.vector_store == "qdrant":
+        from .index.qdrant import QdrantStore
+        _wait_http(args.qdrant_url.rstrip("/") + "/healthz", args.wait)
+        store = QdrantStore(args.qdrant_url, args.qdrant_collection, dim=emb.dim)
+        print(f"[node] vector store=QdrantStore url={args.qdrant_url} collection={args.qdrant_collection}",
+              file=sys.stderr, flush=True)
     node = AttestRAGNode(attester, KBSClient(HttpKBS(args.kbs), attester), emb,
-                         gen, args.data_dir, index_key_id=args.key_id)
+                         gen, args.data_dir, index_key_id=args.key_id, store=store)
     try:
         node.start()
     except KeyReleaseDenied as e:

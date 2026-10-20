@@ -27,6 +27,7 @@
 | Key stolen in transit / evidence for another key | `report_data = H(nonce ‖ tee_pubkey)`; key wrapped (X25519+HKDF+AES-GCM) to that pubkey |
 | GPU evidence spliced from another session | GPU `report_data = H(label ‖ cpu_report_data)` |
 | Host reads/edits index on disk | AES-256-GCM with AAD (format, dim); tamper ⇒ load fails |
+| Vector DB storage on disk | Qdrant storage dir is tmpfs (encrypted RAM); only sealed snapshots (AAD: collection, dim) reach the disk |
 | Client data sent to impostor node | SDK verifies evidence + policy before any upload; data encrypted to the attested transport key |
 | Answer forged or swapped on the network | answer sealed (AES-GCM) with a one-time key the client put inside the question encrypted to the attested node key; a forger cannot know it |
 | Host swaps kernel, initrd, cmdline or any file on the root filesystem | `kernel-hashes` puts kernel/initrd/cmdline in the launch measurement; the cmdline carries the dm-verity root hash of a read-only rootfs, so the whole boot chain is one measurement (`deploy/h200`, reproducible build) |
@@ -68,6 +69,10 @@
   follow them; answers are grounded only by the retrieved chunks and citations.
 - Side channels (cache, ciphertext side channels on SEV, page-fault patterns,
   access-pattern leakage of the vector index), availability/DoS.
+- Qdrant snapshots are whole-collection: `save()` after every ingest is O(index),
+  fine for demos, not for large corpora (needs incremental sealing or a
+  dm-crypt volume keyed by the KBS). Qdrant listens on localhost without auth;
+  any process in the guest can read it, but only measured code runs there.
 - Rollback of the encrypted index to an older version (needs a monotonic
   counter or version bound in the KBS). On h200 the index lives on a plain
   host-provided ext4 disk (`/var/lib/attestrag`): its filesystem metadata is

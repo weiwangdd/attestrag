@@ -1,8 +1,11 @@
-"""Vector index whose persisted form is always AEAD-encrypted.
+"""Vector stores. Whatever the backend, persistent state on untrusted storage is
+always AEAD-sealed with the index key the KBS released to this CVM.
 
-Plaintext vectors and chunk text exist only in (hardware-encrypted) CVM memory.
-On disk: nonce || AES-256-GCM(vectors || payloads), AAD binds format+dim, so a
-host that swaps, truncates or edits the file causes load() to fail.
+- EncryptedVectorIndex: in-memory numpy/FAISS flat index; persisted as one sealed
+  blob (nonce || AES-256-GCM(vectors || payloads), AAD binds format+dim), so a host
+  that swaps, truncates or edits the file makes open() fail.
+- index.qdrant.QdrantStore: a Qdrant server inside the CVM with its storage on
+  tmpfs (encrypted guest RAM); persisted as a sealed collection snapshot.
 """
 
 from __future__ import annotations
@@ -10,6 +13,7 @@ from __future__ import annotations
 import io
 import json
 from pathlib import Path
+from typing import Protocol
 
 import numpy as np
 
@@ -23,7 +27,24 @@ except ImportError:  # pragma: no cover
 FORMAT = b"attestrag-index-v1"
 
 
+class VectorStore(Protocol):
+    """What the node needs from a vector backend."""
+
+    dim: int
+    filename: str  # name of the sealed state file inside the node's data dir
+
+    def __len__(self) -> int: ...
+    def add(self, vectors: np.ndarray, payloads: list[dict]) -> None: ...
+    def search(self, query: np.ndarray, k: int = 4) -> list[tuple[float, dict]]: ...
+    def save(self, path: str | Path, key: bytes) -> None:
+        """Seal the current state to `path` with `key`."""
+    def open(self, path: str | Path, key: bytes) -> None:
+        """Restore state from `path` if it exists (raises on tamper / wrong key), else start empty."""
+
+
 class EncryptedVectorIndex:
+    filename = "index.enc"
+
     def __init__(self, dim: int, use_faiss: bool | None = None):
         self.dim = dim
         self.use_faiss = (faiss is not None) if use_faiss is None else use_faiss
@@ -77,12 +98,18 @@ class EncryptedVectorIndex:
         tmp.write_bytes(seal(key, plain, self._aad()))
         tmp.replace(path)
 
+    def open(self, path: str | Path, key: bytes) -> None:
+        path = Path(path)
+        if not path.exists():
+            return
+        plain = open_sealed(key, path.read_bytes(), self._aad())
+        n = int.from_bytes(plain[:8], "big")
+        self._vecs = np.load(io.BytesIO(plain[8 : 8 + n]), allow_pickle=False).astype(np.float32)
+        self._payloads = json.loads(plain[8 + n :])
+        self._rebuild()
+
     @classmethod
     def load(cls, path: str | Path, key: bytes, dim: int, use_faiss: bool | None = None):
         idx = cls(dim, use_faiss)
-        plain = open_sealed(key, Path(path).read_bytes(), idx._aad())
-        n = int.from_bytes(plain[:8], "big")
-        idx._vecs = np.load(io.BytesIO(plain[8 : 8 + n]), allow_pickle=False).astype(np.float32)
-        idx._payloads = json.loads(plain[8 + n :])
-        idx._rebuild()
+        idx.open(path, key)
         return idx

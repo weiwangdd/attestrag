@@ -119,6 +119,12 @@ if "$HOSTPY" -c 'import attestrag' 2>/dev/null; then
     check "chat endpoint answers"      bash -c "$G 'curl -fs http://127.0.0.1:8091/v1/models' | grep -q chat"
     LLM_ARGS="--embed http://127.0.0.1:8090/v1 --llm http://127.0.0.1:8091/v1 --model chat --embed-model embed"
   fi
+  if "$G" 'systemctl is-enabled qdrant.service' >/dev/null 2>&1; then
+    check "qdrant.service active in guest" bash -c "$G 'systemctl is-active qdrant.service' | grep -qx active"
+    check "qdrant storage is on tmpfs (encrypted RAM), not on a disk" \
+      bash -c "$G 'findmnt -no FSTYPE -T /run/qdrant' | grep -qx tmpfs"
+    LLM_ARGS="$LLM_ARGS --vector-store qdrant --qdrant-collection e2e"
+  fi
   # run a private node for the test (own data dir, same port as the service)
   "$G" "sudo systemctl stop attestrag-node.service 2>/dev/null; sudo pkill -f '[a]ttestrag.node_server'; sudo rm -rf /var/lib/attestrag/e2e" >/dev/null 2>&1
   "$G" "sudo sh -c 'nohup $PY -m attestrag.node_server --kbs http://10.0.2.2:$KBS_PORT --data-dir /var/lib/attestrag/e2e $LLM_ARGS > /tmp/e2e-node.log 2>&1 &'" >/dev/null 2>&1
@@ -141,10 +147,21 @@ if "$HOSTPY" -c 'import attestrag' 2>/dev/null; then
     sed 's/^/      answer: /' "$TMP/answer.txt" | head -4
   fi
   check "index persisted encrypted on the data disk" \
-    bash -c "$G 'ls /var/lib/attestrag/e2e/index.enc && ! grep -aq VCEK /var/lib/attestrag/e2e/index.enc'" 
+    bash -c "$G 'ls /var/lib/attestrag/e2e/*.enc && ! grep -aq VCEK /var/lib/attestrag/e2e/*.enc'"
+  if grep -q -- '--vector-store qdrant' <<<"$LLM_ARGS"; then
+    check "node used QdrantStore" bash -c "$G 'cat /tmp/e2e-node.log' | grep -q 'vector store=QdrantStore'"
+    # reboot-like: drop the live collection, restart the node -> it must restore from the sealed snapshot
+    "$G" "curl -fs -X DELETE http://127.0.0.1:6333/collections/e2e >/dev/null; sudo pkill -f '[a]ttestrag.node_server'; sleep 1" >/dev/null 2>&1
+    "$G" "sudo sh -c 'nohup $PY -m attestrag.node_server --kbs http://10.0.2.2:$KBS_PORT --data-dir /var/lib/attestrag/e2e $LLM_ARGS > /tmp/e2e-node2.log 2>&1 &'" >/dev/null 2>&1
+    for _ in $(seq 1 60); do curl -fs "http://127.0.0.1:$NODE_PORT/healthz" >/dev/null 2>&1 && break; sleep 1; done
+    check "restarted node restored the collection from the sealed snapshot" \
+      bash -c "$G 'cat /tmp/e2e-node2.log' | grep -q 'index has 1 chunks'"
+    "${CLI[@]}" --policy "$TMP/good.json" ask "What signs SNP reports?" > "$TMP/answer2.txt" 2>/dev/null
+    check "answer after restart still mentions VCEK" grep -q VCEK "$TMP/answer2.txt"
+  fi
   check "client with wrong measurement policy refuses to send (exit 3)" \
     bash -c '"$@" upload "$0" >/dev/null 2>&1; [ $? = 3 ]' "$TMP/doc.txt" "${CLI[@]}" --policy "$TMP/bad-measurement.json"
-  "$G" "sudo pkill -f '[a]ttestrag.node_server'; sudo rm -rf /var/lib/attestrag/e2e /tmp/e2e-node.log; sudo systemctl start attestrag-node.service 2>/dev/null" >/dev/null 2>&1
+  "$G" "sudo pkill -f '[a]ttestrag.node_server'; sudo rm -rf /var/lib/attestrag/e2e /tmp/e2e-node.log /tmp/e2e-node2.log; curl -fs -X DELETE http://127.0.0.1:6333/collections/e2e >/dev/null 2>&1; sudo systemctl start attestrag-node.service 2>/dev/null" >/dev/null 2>&1
   [ "$started_kbs" = 1 ] && kill "$KBS_PID" 2>/dev/null
 else
   echo "SKIP  HTTP flow: attestrag not installed in $HOSTPY (pip install the source tarball into $SNP/venv)"

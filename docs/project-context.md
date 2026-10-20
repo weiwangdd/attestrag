@@ -61,7 +61,9 @@ Paper outline: https://claude.ai/code/artifact/18317d5d-c295-48fa-afb6-cfa2a69d1
 3. (done 2026-10-20) HTTP transport: `kbs_server` on the h200 host, `node_server` in the guest
    (reaches the host at 10.0.2.2 via slirp), `python -m attestrag.sdk` client; node :8080 is
    forwarded to host :8081. Trustee KBS integration later.
-4. Index rollback protection (version counter in KBS). Other reference-KBS limits are
+4. Index rollback protection (version counter in KBS). Vector DB: Qdrant inside the CVM
+   (2026-10-20, `index/qdrant.py`, `deploy/h200/guest-qdrant-setup.sh`): tmpfs storage,
+   sealed snapshots; whole-snapshot persistence per ingest is the known scaling limit. Other reference-KBS limits are
    listed in docs/threat-model.md (plaintext key file, single policy, in-memory audit
    and nonces, no TLS/client auth, no key rotation); replace with Trustee KBS or
    harden before any real deployment.

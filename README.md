@@ -34,7 +34,7 @@ attestrag/
   kbs_client/  TEE-side KBS client + in-process reference KBS
   ingest/      parsing + chunking
   embed/       embedders: hashing (tests) or any OpenAI-compatible /v1/embeddings (llama-server in the CVM)
-  index/       vector index (FAISS or numpy), AES-GCM-encrypted at rest
+  index/       VectorStore backends: sealed in-memory index (numpy/FAISS) or Qdrant in the CVM (tmpfs storage, sealed snapshots)
   retrieve/    top-k retrieval
   generate/    extractive stub / OpenAI-compatible chat endpoint (llama-server in the CVM)
   sdk/         client: verify evidence, then encrypted upload/query (+ HTTP transport, CLI)
@@ -88,6 +88,10 @@ sudo python -m attestrag.node_server --kbs http://<kbs-host>:8800 --data-dir /va
 python -m attestrag.sdk --node http://<node>:8080 --policy policies/h200-genoa.json upload doc.md
 python -m attestrag.sdk --node http://<node>:8080 --policy policies/h200-genoa.json ask "..."
 ```
+
+`--vector-store qdrant` keeps the live index in a Qdrant process inside the CVM whose storage
+is on tmpfs (SEV-encrypted RAM); the node persists it as an AES-GCM-sealed collection snapshot
+on the untrusted disk and restores it at start (`attestrag/index/qdrant.py`).
 
 Documents and questions are encrypted to the X25519 key bound into the node's report; the
 answer is sealed with a one-time key carried inside the encrypted question, so only the
