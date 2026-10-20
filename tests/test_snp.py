@@ -260,3 +260,75 @@ def test_configfs_wrong_provider(tmp_path):
 def test_configfs_missing(tmp_path):
     with pytest.raises(AttestationError, match="configfs-tsm"):
         SnpAttester(tmp_path / "nope").attest(RD)
+
+
+# ---------------------------------------------------------------- real hardware sample (h200, Genoa)
+
+H200_DIR = Path(__file__).parent / "fixtures" / "snp" / "h200-genoa"
+POLICY_FILE = Path(__file__).parent.parent / "policies" / "h200-genoa.json"
+
+
+class H200Kds:
+    """Bundled real AMD ARK/ASK; the VCEK is the one KDS returned for this chip + TCB."""
+
+    def __init__(self):
+        self.inner = KdsClient(offline=True)
+        self.vcek_cert = x509.load_der_x509_certificate((H200_DIR / "vcek.der").read_bytes())
+
+    def cert_chain(self, product):
+        return self.inner.cert_chain(product)
+
+    def vcek(self, product, chip_id, tcb):
+        return self.vcek_cert
+
+
+@pytest.fixture(scope="module")
+def h200():
+    meta = json.loads((H200_DIR / "meta.json").read_text())
+    v = SnpVerifier(H200Kds(), clock=lambda: meta["verify_at"])  # real pinned AMD ARKs
+    return meta, (H200_DIR / "report.bin").read_bytes(), v
+
+
+def test_h200_report_parses(h200):
+    meta, raw, _ = h200
+    r = SnpReport.parse(raw)
+    assert r.version == meta["report_version"] and r.vmpl == 0 and not r.debug
+    assert hex(r.policy) == meta["guest_policy"]
+    assert r.measurement.hex() == meta["measurement"]
+    assert snp.product_from_cpuid(r.cpuid_fam, r.cpuid_mod) == "Genoa"
+    assert snp.decode_tcb(r.reported_tcb, "Genoa") == meta["tcb"]
+
+
+def test_h200_report_verifies_against_real_amd_roots(h200):
+    meta, raw, v = h200
+    rd = bytes.fromhex(meta["report_data"])
+    c = v.verify(Evidence(Platform.SEV_SNP, raw, b""), rd)
+    assert c.signer == "amd-genoa-vcek" and c.measurement == meta["measurement"]
+    assert c.tcb == meta["tcb"] and not c.debug
+    assert c.extra["guest_policy"] == meta["guest_policy"]
+
+
+def test_h200_policy_file_allows_and_pins(h200):
+    from attestrag.attest import CompositeClaims
+    meta, raw, v = h200
+    c = v.verify(Evidence(Platform.SEV_SNP, raw, b""), bytes.fromhex(meta["report_data"]))
+    pol = Policy.from_json(POLICY_FILE.read_text())
+    assert evaluate(pol, CompositeClaims(c), meta["verify_at"]).allow
+    stricter = Policy(**{**pol.__dict__, "min_tcb": {**pol.min_tcb, "snp": 25}})
+    assert "cpu: tcb 'snp'=24 < required 25" in evaluate(stricter, CompositeClaims(c), meta["verify_at"]).reasons
+
+
+def test_h200_tamper_and_wrong_nonce_rejected(h200):
+    meta, raw, v = h200
+    rd = bytes.fromhex(meta["report_data"])
+    for off in (0x08, 0x90):  # policy, measurement -> signature breaks
+        bad = bytearray(raw)
+        bad[off] ^= 1
+        with pytest.raises(AttestationError, match="signature"):
+            v.verify(Evidence(Platform.SEV_SNP, bytes(bad), b""), rd)
+    bad = bytearray(raw)
+    bad[0x180] ^= 1  # reported TCB -> no longer matches the VCEK's SPL extensions
+    with pytest.raises(AttestationError, match="SPL"):
+        v.verify(Evidence(Platform.SEV_SNP, bytes(bad), b""), rd)
+    with pytest.raises(AttestationError, match="report_data"):
+        v.verify(Evidence(Platform.SEV_SNP, raw, b""), RD)

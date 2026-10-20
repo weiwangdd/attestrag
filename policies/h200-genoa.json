@@ -1,0 +1,17 @@
+{
+  "allowed_cpu_platforms": [
+    "sev-snp"
+  ],
+  "allowed_measurements": [
+    "1425bebb94e9d33f715bc03db072f9e29add5f3b17bfed53682c999676615e5d29f0181e5271bc12ac6aed355161c897"
+  ],
+  "min_tcb": {
+    "bootloader": 10,
+    "tee": 0,
+    "snp": 24,
+    "microcode": 88
+  },
+  "allowed_guest_policy": [
+    "0x30000"
+  ]
+}

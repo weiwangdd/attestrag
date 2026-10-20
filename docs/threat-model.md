@@ -27,6 +27,7 @@
 | GPU evidence spliced from another session | GPU `report_data = H(label ‖ cpu_report_data)` |
 | Host reads/edits index on disk | AES-256-GCM with AAD (format, dim); tamper ⇒ load fails |
 | Client data sent to impostor node | SDK verifies evidence + policy before any upload; data encrypted to the attested transport key |
+| Host swaps kernel, initrd, cmdline or any file on the root filesystem | `kernel-hashes` puts kernel/initrd/cmdline in the launch measurement; the cmdline carries the dm-verity root hash of a read-only rootfs, so the whole boot chain is one measurement (`deploy/h200`, reproducible build) |
 
 ## Known gaps / out of scope (for now)
 - Mock attestation provides **no security**; TDX/NVIDIA verifiers are TODO.
@@ -45,5 +46,6 @@
 - Rollback of the encrypted index to an older version (needs a monotonic
   counter or version bound in the KBS).
 - Remote inference APIs are not yet attested before use.
-- Measured boot coverage of the full userspace (needs a reproducible image,
-  dm-verity rootfs, and published reference measurements).
+- Measured boot covers userspace only on the self-hosted image (`deploy/h200`);
+  the GCP image is not yet built this way. Guest writes are ephemeral (tmpfs overlay),
+  so persistent state must come through the attested KBS/index path.

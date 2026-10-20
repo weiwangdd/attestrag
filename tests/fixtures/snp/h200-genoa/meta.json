@@ -1,0 +1,17 @@
+{
+  "note": "Real SEV-SNP report from the h200 host (2x EPYC 9554 Genoa, SEV firmware 1.55 build 42), guest built by deploy/h200 (OVMF.amdsev 2025.11, kernel-hashes, dm-verity root). VCEK fetched from AMD KDS on 2026-10-20; ARK/ASK are the bundled AMD roots.",
+  "host": "h200",
+  "product": "Genoa",
+  "report_version": 5,
+  "report_data": "c759dd40e40415e2db53a42fed22cd57a716f9bc1fce32c32a891eed05cd4343beff33eacdd784cb8d37e4244bb3db3b",
+  "measurement": "1425bebb94e9d33f715bc03db072f9e29add5f3b17bfed53682c999676615e5d29f0181e5271bc12ac6aed355161c897",
+  "tcb": {
+    "bootloader": 10,
+    "tee": 0,
+    "snp": 24,
+    "microcode": 88
+  },
+  "guest_policy": "0x30000",
+  "launch_tcb": "0x581800000000000a",
+  "verify_at": 1792454400.0
+}

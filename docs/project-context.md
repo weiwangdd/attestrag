@@ -1,7 +1,7 @@
 # AttestRAG — project context (handoff, 2026-10-15)
 
-Summary of the confidential-RAG discussion and development so far, for seeding a new
-project. Code lives in `~/src/attestrag` (local git, not pushed anywhere).
+Summary of the confidential-RAG discussion and development so far. Code:
+github.com/weiwangdd/attestrag (private), local clone `~/src/attestRAG`. Updated 2026-10-20.
 
 ## Idea
 Open-source, end-to-end **attestable RAG** deployed into the customer's own cloud
@@ -37,18 +37,26 @@ Paper outline: https://claude.ai/code/artifact/18317d5d-c295-48fa-afb6-cfa2a69d1
   hardware**: configfs-tsm attester; verifier with bundled+pinned AMD ARK/ASK
   (Milan/Genoa/Turin), VCEK from AMD KDS (cached), VCEK hwID/TCB binding, ECDSA-P384.
   `python -m attestrag.demo --snp`. Deploy: `deploy/gcp/snp-vm.sh up|demo|ssh|status|down`.
-  Commit d1caa05. 45 tests pass.
+  Commit d1caa05.
+- Step 1 validated on real hardware 2026-10-20 (h200: Gigabyte G494, 2x EPYC 9554 Genoa,
+  SEV firmware 1.55): attester (configfs-tsm in the guest) and verifier (KDS Genoa VCEK,
+  pinned ARK) both worked unchanged; measurement reproduced offline by sev-snp-measure.
+  `deploy/h200/` holds the QEMU launcher and a reproducible dm-verity image build;
+  `policies/h200-genoa.json` the resulting policy; `tests/fixtures/snp/h200-genoa/` the
+  real report as a golden test. 49 tests pass.
 
 ## Open items / next steps
-1. User creates a Google Cloud account + project, installs gcloud, runs
-   `deploy/gcp/snp-vm.sh up`; fix issues against a real report; save it as a golden test.
+1. (done on h200 instead of GCP) GCP N2D path still unexercised; Milan VCEK/ARK untested
+   against a real report.
 2. Plug llama.cpp (CPU, 3–8B quantized) into `generate` for demos.
 3. HTTP transport for KBS/node; Trustee KBS integration.
 4. Index rollback protection (version counter in KBS).
 5. TDX (DCAP) verifier; NVIDIA CC GPU evidence verification; benchmark CC-mode overhead.
 6. Lean specification of the policy engine; Python ↔ Lean differential tests.
-7. Reference measurements: reproducible image; on GCP use Google launch endorsements
-   (gce-tcb-verifier) instead of TOFU.
+7. Reference measurements: done for h200 (`deploy/h200/build-verity-image.sh`); on GCP
+   use Google launch endorsements (gce-tcb-verifier) instead of TOFU.
+8. GPU CC mode on one H200 NVL (open driver already installed on the host); NVIDIA
+   evidence verification.
 
 Known limitations: VLEK reports rejected; `--snp` demo runs KBS in the same CVM and uses
 TOFU policy (plumbing only, not a trust boundary).

@@ -21,8 +21,9 @@ What makes it different:
 
 > Status: milestone 1 — full flow works locally with **mock** attestation.
 > SEV-SNP attester (configfs-tsm) and verifier (pinned AMD ARK → ASK → VCEK via KDS)
-> are implemented and unit-tested against synthetic reports; they have not yet run on
-> real hardware. TDX / NVIDIA CC are placeholders. Not for production.
+> are implemented and validated on real hardware (self-hosted EPYC Genoa host, see
+> `deploy/h200`); a real signed report is the golden sample in
+> `tests/fixtures/snp/h200-genoa/`. TDX / NVIDIA CC are placeholders. Not for production.
 
 ## Layout
 
@@ -39,7 +40,10 @@ attestrag/
   sdk/         client: verify evidence, then encrypted upload/query
   node.py      the in-CVM service tying it together
   demo.py      local end-to-end demo
-tests/         unit + end-to-end tests
+policies/    reference key-release policies (h200-genoa.json: measurement allow-list, min TCB, guest policy)
+deploy/gcp/  GCP N2D SEV-SNP VM deploy script
+deploy/h200/ self-hosted SEV-SNP CVM: QEMU launcher, reproducible dm-verity image build, reference measurements
+tests/       unit + end-to-end tests, incl. a real Genoa report (fixtures/snp/h200-genoa)
 docs/threat-model.md
 ```
 
@@ -68,12 +72,24 @@ deploy/gcp/snp-vm.sh down                           # delete when done
 
 `DRY_RUN=1 deploy/gcp/snp-vm.sh up` prints the gcloud commands without running them.
 
+## Real SEV-SNP on your own host
+
+`deploy/h200/` runs a CPU-only SNP guest with QEMU directly (no libvirt), measures the
+whole boot chain (OVMF + kernel/initrd/cmdline via `kernel-hashes`, root filesystem via
+dm-verity with the root hash on the cmdline) and rebuilds the image reproducibly so the
+expected measurement can be recomputed by anyone. The resulting values are in
+`policies/h200-genoa.json`; use them instead of TOFU:
+
+```bash
+sudo python -m attestrag.demo --snp --policy policies/h200-genoa.json
+```
+
 ## Roadmap
 
 1. ✅ Mock end-to-end: verify → release key → encrypted ingest → retrieve → generate
-2. 🚧 SEV-SNP attester + verifier implemented; validate on a GCP N2D SNP VM, publish reference measurements
+2. ✅ SEV-SNP attester + verifier validated on real hardware (EPYC Genoa, `deploy/h200`); reference measurement + policy published (`policies/h200-genoa.json`); GCP N2D still untested
 3. TDX quote verification (DCAP); NVIDIA CC GPU evidence (NRAS / local verifier)
-4. HTTP transport; integrate with Trustee KBS; reproducible CVM image + published measurements
+4. HTTP transport; integrate with Trustee KBS (reproducible dm-verity CVM image + published measurement: done for h200)
 5. Lean specification of the policy engine; differential testing Python ↔ Lean
 6. Local LLM (llama.cpp) inside the CVM; attested remote inference endpoints
 
