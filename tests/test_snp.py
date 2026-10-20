@@ -273,7 +273,7 @@ class H200Kds:
 
     def __init__(self):
         self.inner = KdsClient(offline=True)
-        self.vcek_cert = x509.load_der_x509_certificate((H200_DIR / "vcek.der").read_bytes())
+        self.vcek_cert = snp.load_der_cert((H200_DIR / "vcek.der").read_bytes())
 
     def cert_chain(self, product):
         return self.inner.cert_chain(product)
@@ -306,6 +306,7 @@ def test_h200_report_verifies_against_real_amd_roots(h200):
     assert c.signer == "amd-genoa-vcek" and c.measurement == meta["measurement"]
     assert c.tcb == meta["tcb"] and not c.debug
     assert c.extra["guest_policy"] == meta["guest_policy"]
+    assert c.extra["launch_tcb"] == meta["launch_tcb"]  # offset 0x1F0, not 0x1F8
 
 
 def test_h200_policy_file_allows_and_pins(h200):
@@ -316,6 +317,9 @@ def test_h200_policy_file_allows_and_pins(h200):
     assert evaluate(pol, CompositeClaims(c), meta["verify_at"]).allow
     stricter = Policy(**{**pol.__dict__, "min_tcb": {**pol.min_tcb, "snp": 25}})
     assert "cpu: tcb 'snp'=24 < required 25" in evaluate(stricter, CompositeClaims(c), meta["verify_at"]).reasons
+    assert pol.allowed_guest_policy == frozenset({0x30000})
+    no_smt = Policy(**{**pol.__dict__, "allowed_guest_policy": frozenset({0x20000})})
+    assert "cpu: guest policy 0x30000 not in allow-list" in evaluate(no_smt, CompositeClaims(c), meta["verify_at"]).reasons
 
 
 def test_h200_tamper_and_wrong_nonce_rejected(h200):

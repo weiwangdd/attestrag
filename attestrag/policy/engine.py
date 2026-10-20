@@ -25,6 +25,9 @@ class Policy:
     allowed_gpu_platforms: frozenset[Platform] = frozenset()
     allowed_gpu_measurements: frozenset[str] = frozenset()  # empty = any
     min_gpu_tcb: dict[str, int] = field(default_factory=dict)
+    # SEV-SNP guest policy (report GUEST_POLICY) allow-list, e.g. {0x30000}; empty = not checked.
+    # Covers bits the debug flag alone does not: MIGRATE_MA, SMT, SINGLE_SOCKET, ABI version.
+    allowed_guest_policy: frozenset[int] = frozenset()
 
     @classmethod
     def from_dict(cls, d: dict) -> "Policy":
@@ -39,11 +42,16 @@ class Policy:
             allowed_gpu_platforms=frozenset(Platform(p) for p in d.get("allowed_gpu_platforms", [])),
             allowed_gpu_measurements=frozenset(m.lower() for m in d.get("allowed_gpu_measurements", [])),
             min_gpu_tcb={k: int(v) for k, v in d.get("min_gpu_tcb", {}).items()},
+            allowed_guest_policy=frozenset(_to_int(p) for p in d.get("allowed_guest_policy", [])),
         )
 
     @classmethod
     def from_json(cls, s: str) -> "Policy":
         return cls.from_dict(json.loads(s))
+
+
+def _to_int(v) -> int:
+    return int(v, 0) if isinstance(v, str) else int(v)
 
 
 @dataclass(frozen=True)
@@ -87,6 +95,12 @@ def evaluate(policy: Policy, claims: CompositeClaims, now: float) -> Decision:
         reasons.append("cpu: measurement not in allow-list")
     reasons += check_min_tcb(cpu.tcb, policy.min_tcb, "cpu")
     reasons += _freshness(cpu, policy, now, "cpu")
+    if policy.allowed_guest_policy:
+        gp = cpu.extra.get("guest_policy")
+        if gp is None:
+            reasons.append("cpu: guest policy not reported")
+        elif _to_int(gp) not in policy.allowed_guest_policy:
+            reasons.append(f"cpu: guest policy {gp} not in allow-list")
 
     if policy.require_gpu and not claims.gpus:
         reasons.append("gpu: GPU evidence required but none presented")

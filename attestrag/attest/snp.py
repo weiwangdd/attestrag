@@ -31,6 +31,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+import warnings
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
@@ -179,7 +180,7 @@ class SnpReport:
             cpuid_step=raw[0x18A],
             chip_id=raw[0x1A0:0x1E0],
             committed_tcb=u64(0x1E0),
-            launch_tcb=u64(0x1F8),
+            launch_tcb=u64(0x1F0),
             sig_r=int.from_bytes(raw[0x2A0:0x2A0 + 72], "little"),
             sig_s=int.from_bytes(raw[0x2A0 + 72:0x2A0 + 144], "little"),
         )
@@ -285,7 +286,7 @@ class KdsClient:
         return f"{self.base_url}/{product}/{hwid.hex()}?{q}"
 
     def vcek(self, product: str, chip_id: bytes, tcb: dict[str, int]) -> x509.Certificate:
-        return x509.load_der_x509_certificate(self._get(self.vcek_url(product, chip_id, tcb)))
+        return load_der_cert(self._get(self.vcek_url(product, chip_id, tcb)))
 
     def _get(self, url: str) -> bytes:
         path = self.cache_dir / hashlib.sha256(url.encode()).hexdigest()
@@ -305,6 +306,23 @@ class KdsClient:
         tmp.write_bytes(data)
         tmp.replace(path)
         return data
+
+
+def load_der_cert(der: bytes) -> x509.Certificate:
+    """Load an AMD certificate. AMD VCEKs carry serial number 0, which RFC 5280 forbids;
+    `cryptography` currently only warns about it. The h200 golden test loads a real VCEK,
+    so a release that starts rejecting them fails the suite instead of production."""
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*serial number.*", category=Warning)
+        try:
+            return x509.load_der_x509_certificate(der)
+        except ValueError as e:
+            raise AttestationError(f"cannot parse certificate (cryptography {_crypto_version()}): {e}") from e
+
+
+def _crypto_version() -> str:
+    import cryptography
+    return cryptography.__version__
 
 
 def _der_int(b: bytes) -> int:
@@ -388,7 +406,7 @@ class SnpVerifier(Verifier):
 
     def _vcek(self, ev: Evidence, product: str, r: SnpReport, tcb: dict[str, int]) -> x509.Certificate:
         for der in ev.cert_chain:
-            c = x509.load_der_x509_certificate(der)
+            c = load_der_cert(der)
             cn = c.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
             if cn and cn[0].value == "SEV-VCEK":
                 return c

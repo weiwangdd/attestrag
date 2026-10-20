@@ -50,6 +50,14 @@ def test_gpu_required(make_attester, verifier, policy):
     assert not d.allow and any(r.startswith("gpu[0]: tcb 'driver'") for r in d.reasons)
 
 
+def test_guest_policy_allowlist(make_attester, verifier, policy):
+    p = Policy(**{**policy.__dict__, "allowed_guest_policy": frozenset({0x30000})})
+    d = evaluate(p, claims(make_attester, verifier), time.time())  # mock claims carry no guest policy
+    assert not d.allow and "cpu: guest policy not reported" in d.reasons
+    assert Policy.from_json('{"allowed_cpu_platforms": [], "allowed_measurements": [],'
+                            ' "allowed_guest_policy": ["0x30000", 196608]}').allowed_guest_policy == {0x30000}
+
+
 def test_policy_from_json():
     p = Policy.from_json(
         '{"allowed_cpu_platforms": ["sev-snp", "tdx"], "allowed_measurements": ["AB"],'

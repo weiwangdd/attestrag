@@ -21,6 +21,7 @@
 |---|---|
 | Modified image | measurement allow-list (`policy.allowed_measurements`) |
 | Debug CVM | `debug` claim must be false |
+| Guest launched with migration agent, SMT or other policy bits the deployment forbids | `allowed_guest_policy` allow-list on the SNP GUEST_POLICY (e.g. `0x30000`) |
 | Known-vulnerable firmware/microcode | component-wise `min_tcb` (no lexicographic compensation) |
 | Evidence replay | single-use, expiring KBS nonce; `max_age_s` freshness |
 | Key stolen in transit / evidence for another key | `report_data = H(nonce ‖ tee_pubkey)`; key wrapped (X25519+HKDF+AES-GCM) to that pubkey |

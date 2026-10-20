@@ -92,7 +92,7 @@ def build_report(vcek_key, report_data: bytes, *, measurement=b"\x5a" * 48,
     r[0x188:0x18B] = bytes(cpuid)
     r[0x1A0:0x1E0] = chip_id
     struct.pack_into("<Q", r, 0x1E0, t)
-    struct.pack_into("<Q", r, 0x1F8, t)
+    struct.pack_into("<Q", r, 0x1F0, t)  # LAUNCH_TCB
     sig = vcek_key.sign(bytes(r[: snp.SIGNED_LEN]), ec.ECDSA(hashes.SHA384()))
     rr, ss = decode_dss_signature(sig)
     r[0x2A0:0x2A0 + 72] = rr.to_bytes(72, "little")
