@@ -58,7 +58,10 @@ Paper outline: https://claude.ai/code/artifact/18317d5d-c295-48fa-afb6-cfa2a69d1
 3. (done 2026-10-20) HTTP transport: `kbs_server` on the h200 host, `node_server` in the guest
    (reaches the host at 10.0.2.2 via slirp), `python -m attestrag.sdk` client; node :8080 is
    forwarded to host :8081. Trustee KBS integration later.
-4. Index rollback protection (version counter in KBS).
+4. Index rollback protection (version counter in KBS). Other reference-KBS limits are
+   listed in docs/threat-model.md (plaintext key file, single policy, in-memory audit
+   and nonces, no TLS/client auth, no key rotation); replace with Trustee KBS or
+   harden before any real deployment.
 5. TDX (DCAP) verifier; NVIDIA CC GPU evidence verification; benchmark CC-mode overhead.
 6. Lean specification of the policy engine; Python ↔ Lean differential tests.
 7. Reference measurements: done for h200 (`deploy/h200/build-verity-image.sh`); on GCP

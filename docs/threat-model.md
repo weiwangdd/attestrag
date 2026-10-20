@@ -32,6 +32,25 @@
 | Host swaps kernel, initrd, cmdline or any file on the root filesystem | `kernel-hashes` puts kernel/initrd/cmdline in the launch measurement; the cmdline carries the dm-verity root hash of a read-only rootfs, so the whole boot chain is one measurement (`deploy/h200`, reproducible build) |
 
 ## Known gaps / out of scope (for now)
+
+### Reference KBS (`kbs_client/reference_kbs.py`, `kbs_server.py`)
+- Keys live in process memory plus a plaintext JSON file (0600) on the KBS host;
+  no HSM / KMS backing, no key rotation or revocation.
+- One policy for all key ids; no per-key or per-tenant policy, no policy versioning
+  or signed policy updates.
+- Audit records are an in-memory list plus one stderr line per request; nothing
+  durable or tamper-evident.
+- Nonces are in memory: a KBS restart forgets outstanding challenges (harmless,
+  clients retry) and a single instance only, no shared state for several replicas.
+- No TLS, no client authentication: anyone who can reach the port can request a
+  challenge and present evidence. Release still requires valid evidence, but the
+  endpoint is open to probing and DoS.
+- No index version counter: a rolled-back `index.enc` decrypts fine (see rollback
+  below).
+- Freshness relies entirely on the single-use nonce (SNP reports carry no time);
+  `max_age_s` is inert for SNP because `issued_at` is the verification time.
+- The verifier fetches VCEKs from AMD KDS on first sight of a chip/TCB and caches
+  them on disk; an offline KBS needs a pre-populated cache.
 - Mock attestation provides **no security**; TDX/NVIDIA verifiers are TODO.
 - SEV-SNP: VLEK-signed reports are rejected (not yet supported); ARK pins are
   compiled in, so an AMD root rotation needs a release. Reports carry no
