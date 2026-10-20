@@ -29,7 +29,14 @@
 | Client data sent to impostor node | SDK verifies evidence + policy before any upload; data encrypted to the attested transport key |
 
 ## Known gaps / out of scope (for now)
-- Mock attestation provides **no security**; SNP/TDX/NVIDIA verifiers are TODO.
+- Mock attestation provides **no security**; TDX/NVIDIA verifiers are TODO.
+- SEV-SNP: VLEK-signed reports are rejected (not yet supported); ARK pins are
+  compiled in, so an AMD root rotation needs a release. Reports carry no
+  timestamp — freshness relies entirely on the single-use KBS nonce. The
+  `--snp` demo runs the KBS inside the same CVM and uses TOFU for the policy;
+  it demonstrates plumbing, not a trust boundary.
+- On GCP the launch measurement covers Google's UEFI firmware; reference values
+  must come from Google's launch endorsements (gce-tcb-verifier), not TOFU.
 - GPU binding above proves session freshness, not that the GPU is the one
   attached to this CVM over an SPDM-protected link; that needs the CVM to attest
   its GPU session (e.g. NVIDIA CC + measured driver in the CPU measurement).

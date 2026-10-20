@@ -1,11 +1,23 @@
-"""Local demo with mock attestation: python -m attestrag.demo"""
+"""End-to-end demo.
+
+    python -m attestrag.demo                    # mock attestation, runs anywhere
+    sudo python -m attestrag.demo --snp         # real SEV-SNP inside an SNP CVM
+
+In --snp mode the KBS still runs in-process (inside the same CVM), which proves
+the plumbing but is NOT a meaningful trust setup: in production the KBS runs in
+the customer's own trust domain. Without --policy, the demo trusts the first
+measurement/TCB it observes (TOFU) and prints that policy so it can be pinned.
+"""
 
 from __future__ import annotations
 
+import argparse
+import json
+import os
+import sys
 import tempfile
 
-from .attest import CompositeAttester, CompositeVerifier, Platform
-from .attest.mock import MockAttester, MockTEEConfig, MockVendor, MockVerifier
+from .attest import CompositeAttester, CompositeVerifier, Platform, cpu_report_data
 from .common.crypto import new_key
 from .embed import HashingEmbedder
 from .generate import StubGenerator
@@ -14,11 +26,31 @@ from .node import AttestRAGNode
 from .policy import Policy
 from .sdk import AttestRAGClient
 
+DOC = b"The VCEK signs SEV-SNP attestation reports.\n\nTDX quotes carry MRTD."
 
-def main() -> None:
+
+def run_flow(attester: CompositeAttester, verifier: CompositeVerifier, policy: Policy) -> None:
+    kbs = ReferenceKBS(verifier, policy)
+    kbs.put_key("index-dek", new_key())
+    with tempfile.TemporaryDirectory() as d:
+        node = AttestRAGNode(attester, KBSClient(kbs, attester), HashingEmbedder(), StubGenerator(), d)
+        node.start()
+        rec = kbs.audit[-1]
+        print(f"KBS released '{rec.key_id}' to measurement {rec.measurement[:24]}...")
+        client = AttestRAGClient(node, verifier, policy)
+        claims = client.connect()
+        print(f"client verified node: platform={claims.cpu.platform.value} tcb={claims.cpu.tcb} "
+              f"gpus={len(claims.gpus)}")
+        client.upload("snp", DOC)
+        res = client.ask("What signs SNP reports?")
+        print("answer:", res["answer"]["text"])
+
+
+def mock_main() -> None:
+    from .attest.mock import MockAttester, MockTEEConfig, MockVendor, MockVerifier
+
     amd, nv = MockVendor("mock-amd"), MockVendor("mock-nvidia")
     mv = MockVerifier({amd.name: amd.root_public, nv.name: nv.root_public})
-    verifier = CompositeVerifier({Platform.MOCK_CPU: mv, Platform.MOCK_GPU: mv})
     measurement = "ab" * 48
     policy = Policy(
         allowed_cpu_platforms=frozenset({Platform.MOCK_CPU}),
@@ -32,19 +64,44 @@ def main() -> None:
         MockAttester(amd, MockTEEConfig(measurement=measurement)),
         [MockAttester(nv, MockTEEConfig(Platform.MOCK_GPU, "cd" * 48, {"driver": 550}))],
     )
-    kbs = ReferenceKBS(verifier, policy)
-    kbs.put_key("index-dek", new_key())
+    run_flow(attester, CompositeVerifier({Platform.MOCK_CPU: mv, Platform.MOCK_GPU: mv}), policy)
 
-    with tempfile.TemporaryDirectory() as d:
-        node = AttestRAGNode(attester, KBSClient(kbs, attester), HashingEmbedder(), StubGenerator(), d)
-        node.start()
-        print("KBS released index key:", kbs.audit[-1])
-        client = AttestRAGClient(node, verifier, policy)
-        claims = client.connect()
-        print("client verified node:", claims.cpu.measurement[:16], "+", len(claims.gpus), "GPU(s)")
-        client.upload("snp", b"The VCEK signs SEV-SNP attestation reports.\n\nTDX quotes carry MRTD.")
-        res = client.ask("What signs SNP reports?")
-        print("answer:", res["answer"]["text"])
+
+def snp_main(policy_path: str | None, product: str | None) -> None:
+    from .attest.snp import SnpAttester, SnpVerifier
+
+    attester = CompositeAttester(SnpAttester())
+    verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(product=product)})
+    if policy_path:
+        with open(policy_path) as f:
+            policy = Policy.from_json(f.read())
+    else:
+        rd = cpu_report_data(os.urandom(32), bytes(32))
+        probe = verifier.verify(attester.attest(rd), rd).cpu
+        print("WARNING: no --policy given; trusting observed measurement/TCB (TOFU).", file=sys.stderr)
+        observed = {
+            "allowed_cpu_platforms": ["sev-snp"],
+            "allowed_measurements": [probe.measurement],
+            "min_tcb": probe.tcb,
+        }
+        print("observed policy (save and pass with --policy):")
+        print(json.dumps(observed, indent=2))
+        print("report extras:", json.dumps(probe.extra, indent=2))
+        policy = Policy.from_dict(observed)
+    run_flow(attester, verifier, policy)
+
+
+def main(argv: list[str] | None = None) -> None:
+    ap = argparse.ArgumentParser(prog="python -m attestrag.demo")
+    ap.add_argument("--snp", action="store_true", help="use real SEV-SNP attestation (needs root in an SNP CVM)")
+    ap.add_argument("--policy", help="policy JSON file (SNP mode)")
+    ap.add_argument("--product", choices=["Milan", "Genoa", "Turin"],
+                    help="AMD product, needed only if the report lacks CPUID fields")
+    args = ap.parse_args(argv)
+    if args.snp:
+        snp_main(args.policy, args.product)
+    else:
+        mock_main()
 
 
 if __name__ == "__main__":
