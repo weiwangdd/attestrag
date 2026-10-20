@@ -108,7 +108,7 @@ REMOTE
 
 fetch_capture() {
   local dest="$ROOT/deploy/gcp/out/$(date -u +%Y%m%dT%H%M%SZ)"
-  mkdir -p "$dest"
+  [ "$DRY_RUN" = 1 ] || mkdir -p "$dest"
   run gcloud compute scp --recurse "$NAME:$REMOTE_DIR/snp-capture/*" "$dest/" "${G[@]}" \
     && echo "SNP capture saved to $dest" \
     || echo "warning: could not copy snp-capture back from the VM" >&2
