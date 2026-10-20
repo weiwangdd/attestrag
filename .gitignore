@@ -8,3 +8,10 @@ __pycache__/
 *.egg-info/
 dist/
 data/
+# CVM image build outputs (deploy/h200)
+*.raw
+*.hash
+*.qcow2
+*.img
+*.fd
+build-*/

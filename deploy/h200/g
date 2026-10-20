@@ -1,0 +1,4 @@
+#!/bin/bash
+# run a command inside the SNP guest: g 'cmd'   | copy file in: g -c localfile remotepath
+S="-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i $HOME/snp/snpvm_key"
+if [ "$1" = -c ]; then scp $S -P 2222 "$2" ubuntu@127.0.0.1:"$3"; else ssh -n $S -p 2222 ubuntu@127.0.0.1 "$@"; fi
