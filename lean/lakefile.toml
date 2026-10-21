@@ -1,0 +1,9 @@
+name = "attestrag-spec"
+version = "0.1.0"
+defaultTargets = ["AttestRAG"]
+
+[leanOptions]
+autoImplicit = false
+
+[[lean_lib]]
+name = "AttestRAG"
