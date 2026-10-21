@@ -1,0 +1,9 @@
+# build intermediates and copies made by build.py
+usenix/*.log
+usenix/*.blg
+usenix/*.aux
+usenix/*.bbl
+usenix/refs.bib
+usenix/usenix2019_v3.sty
+usenix/figures/
+usenix/body.md
