@@ -16,7 +16,7 @@
 {\small\noindent\emph{Draft v0.1, 2026-10-21. Wei Wang. Status markers: \textbf{[done]} = implemented and measured on hardware; \textbf{[design]} = designed, not implemented; \textbf{[TODO]} = open item for the next draft.}}
 \begin{abstract}
 
-Enterprises hand contracts, medical records and source code to retrieval-augmented generation (RAG) services, yet every deployed "confidential inference" offering protects only the model call: documents are parsed, embedded, indexed and retrieved in the clear on the provider\textquotesingle s host, and embeddings are not a safe intermediate form, since inversion attacks recover the text behind them. We present AttestRAG, a RAG system in which the whole pipeline, from parsing to generation, runs inside hardware-isolated confidential VMs, and in which a client can verify the entire chain before it uploads a single byte. AttestRAG binds the CPU TEE report, the GPU attestation and the measurement of every pipeline component into one composite statement; releases the keys that protect the persisted vector index only after a small, pure policy function accepts that statement; and seals every answer with a one-time key that only the attested node can learn, so that neither the host nor the network can forge or swap a reply. We built AttestRAG on AMD SEV-SNP with a reproducible, measured boot chain (firmware, kernel, initrd, command line and a dm-verity root filesystem under one launch measurement) and evaluated it end to end on the RGB benchmark inside a 32-vCPU confidential VM. Attestation is not the cost: establishing a verified session takes 10--30 ms, two orders of magnitude below a single answer. Retrieval inside the TEE loses nothing (hit@4 = 1.0 on both languages), while CPU-bound generation sets the latency floor (1.4 s per English answer, 3.2 s per Chinese answer) and collapses under concurrency, which is the direct motivation for the GPU TEE stage. The verifier, policy engine and key-release protocol are 2.3 k lines of Python with no dependency beyond a cryptography library, small enough for the Lean formalization that the next version of this paper targets.
+Enterprises hand contracts, medical records and source code to retrieval-augmented generation (RAG) services, yet every deployed "confidential inference" offering protects only the model call: documents are parsed, embedded, indexed and retrieved in the clear on the provider\textquotesingle s host, and embeddings are not a safe intermediate form, since inversion attacks recover the text behind them. We present AttestRAG, a RAG system in which the whole pipeline, from parsing to generation, runs inside hardware-isolated confidential VMs, and in which a client can verify the entire chain before it uploads a single byte. AttestRAG binds the CPU TEE report, the GPU attestation and the measurement of every pipeline component into one composite statement; releases the keys that protect the persisted vector index only after a small, pure policy function accepts that statement; and seals every answer with a one-time key that only the attested node can learn, so that neither the host nor the network can forge or swap a reply. We built AttestRAG on AMD SEV-SNP with a reproducible, measured boot chain (firmware, kernel, initrd, command line and a dm-verity root filesystem under one launch measurement) and evaluated it end to end on the RGB benchmark inside a 32-vCPU confidential VM. Attestation is not the cost: establishing a verified session takes 10--30 ms, two orders of magnitude below a single answer. Retrieval inside the TEE loses nothing (hit@4 = 1.0 on both languages), while CPU-bound generation sets the latency floor (1.4 s per English answer, 3.2 s per Chinese answer) and collapses under concurrency, which is the direct motivation for the GPU TEE stage. The verifier, policy engine and key-release protocol are 2.3 k lines of Python with no dependency beyond a cryptography library, small enough that the release protocol can be analysed as a whole and the policy function run as an executable specification.
 
 \end{abstract}
 
@@ -42,7 +42,7 @@ This paper presents AttestRAG, a RAG system with the following properties.
   \textbf{Client-side verifiability.} The client SDK runs the same verifier and the same policy as the KBS, before it uploads anything. Questions are encrypted to the attested node key and carry a one-time reply key, and the answer is sealed with that key, so an answer the client accepts can only have been produced by the node that could read the question.
 \end{itemize}
 
-We implemented AttestRAG (Section 7) and deployed it on a self-hosted SEV-SNP machine (2x AMD EPYC 9554, 4x H200 NVL) with a reproducible image build whose measurement we verify offline. Section 8 reports the first end-to-end measurements on the RGB benchmark \cite{chen2024rgb}. The GPU stage, the Intel TDX verifier and the Lean formalization are designed but not yet implemented; the paper marks these parts explicitly, and Appendix A lists the status of every claim.
+We implemented AttestRAG (Section 7) and deployed it on a self-hosted SEV-SNP machine (2x AMD EPYC 9554, 4x H200 NVL) with a reproducible image build whose measurement we verify offline. Section 8 reports the first end-to-end measurements on the RGB benchmark \cite{chen2024rgb}. The GPU stage, the Intel TDX verifier and the formal analysis of the release protocol are designed but not yet implemented; the paper marks these parts explicitly, and Appendix A lists the status of every claim.
 
 \textbf{Contributions.}
 
@@ -56,7 +56,7 @@ We implemented AttestRAG (Section 7) and deployed it on a self-hosted SEV-SNP ma
 \item
   Post-attestation key release with a measurement allow-list, component-wise minimum TCB and guest-policy checks, and an index that is sealed per tenant and never present in plaintext on the host (Section 5.3--5.4). \textbf{{[}done{]}}; rollback protection \textbf{{[}design{]}}.
 \item
-  A policy engine written as a small, total, side-effect-free function over plain data so that it can be mirrored by a Lean specification (Section 6). \textbf{{[}done{]}} as code; proofs \textbf{{[}TODO{]}}.
+  A key-release protocol and policy designed for formal analysis: the protocol properties that matter (a key reaches only the TEE that proved possession in the same session; no replay; no cross-session GPU evidence) are stated for a symbolic protocol model, and the policy function is small, total and pure so that its executable specification can be the engine that actually runs (Section 6). \textbf{{[}done{]}} for the code; the protocol model and the executable specification are \textbf{{[}TODO{]}}.
 \item
   An open-source implementation and an end-to-end evaluation on real SEV-SNP hardware, including the attestation and key-release costs, retrieval and answer quality inside the TEE, and the concurrency behaviour of CPU-only inference (Sections 7--8). \textbf{{[}done{]}} for the CPU configuration.
 \end{enumerate}
@@ -176,23 +176,29 @@ The guest image is built reproducibly: a golden qcow2 image is shrunk to a minim
 
 The client runs the same verifier and policy as the KBS. \texttt{connect()} draws a nonce, requests the node\textquotesingle s evidence and its transport public key, verifies the evidence against \texttt{cpu\_report\_data(nonce,\ node\_pub)}, evaluates the policy, and only then remembers \texttt{node\_pub}; any call before a successful \texttt{connect()} is refused locally. Documents are wrapped to \texttt{node\_pub} with the document identifier as context. A question is wrapped together with a freshly drawn one-time reply key; the node\textquotesingle s answer, including the retrieved hits and citations, is sealed under that reply key with a fixed associated-data label. An adversary on the network or on the host can neither read the question nor produce an answer the client will accept, because learning the reply key requires the node\textquotesingle s private transport key, which exists only inside the attested VM. An earlier design that returned answers in plaintext was forgeable on the network; this version fixes it.
 
-\section{\texorpdfstring{Formal verification of the policy engine \textbf{{[}design{]}}}{Formal verification of the policy engine {[}design{]}}}\label{formal-verification-of-the-policy-engine-design}
+\section{\texorpdfstring{Formal analysis of key release \textbf{{[}design{]}}}{Formal analysis of key release {[}design{]}}}\label{formal-analysis-of-key-release-design}
 
-The policy engine was written for this purpose: \texttt{evaluate(policy,\ claims,\ now)} is total, pure, and operates on frozen records of strings and integers. The plan is a Lean 4 model with the same three types (Policy, Claims, Decision), the same evaluation function, and theorems for the properties the system relies on:
+Where formal methods earn their place here is the release protocol, not the policy function. The policy function is under a hundred lines of set membership and integer comparison; a proof that it satisfies its own rules would mostly restate it. None of the defects found while building the system were in it: the launch-TCB field read at the wrong offset, the certificate parser rejecting AMD\textquotesingle s zero serial numbers, and an earlier answer path that a network adversary could forge all sat in the verifier, the parser and the protocol. The analysis is therefore split into two parts with different tools, and the paper states what neither covers.
+
+\textbf{Protocol properties.} The release protocol of Section 5.3 together with the binding rules of Section 5.2 forms a small protocol between a TEE, a KBS and a network adversary who controls the host. The properties the system relies on are protocol properties with an adversary, and they will be stated and checked in a symbolic model (Tamarin or ProVerif):
 
 \begin{itemize}
 \tightlist
 \item
-  \textbf{No key without a passing measurement}: if \texttt{allow} then the CPU measurement is in the allow-list and the platform is allowed.
+  \textbf{Possession}: if the KBS releases a key wrapped to a public key \(pk\), then a TEE that passed verification and policy generated \(pk\) and holds the matching private key; an adversary who relays genuine evidence obtains nothing it can open.
 \item
-  \textbf{Minimum TCB is monotone and component-wise}: if any required component is below its minimum then \texttt{allow} is false, regardless of the other components.
+  \textbf{Freshness}: a release is preceded by a challenge in the same session; evidence from an earlier session, or evidence replayed after its nonce was consumed, is never accepted.
 \item
-  \textbf{Binding}: if \texttt{allow} then every GPU claim was verified against \texttt{gpu\_report\_data(cpu.report\_data)}; in the model this is a precondition carried by the composite claims type.
+  \textbf{No cross-session GPU evidence}: a GPU report accepted with a CPU report was produced over that CPU report\textquotesingle s \texttt{report\_data}; a report from another machine or session is rejected whatever its own signature says. This is the forwarding gap of Section 3, stated as a property.
 \item
-  \textbf{Debug and guest policy}: \texttt{debug\ =\ true} or a guest policy outside the allow-list implies \texttt{allow\ =\ false}.
+  \textbf{Answer authenticity}: an answer the client accepts was produced by the node that decrypted the question, since the reply key travels only inside the question wrapped to the node\textquotesingle s attested key.
 \end{itemize}
 
-The correspondence between the Lean model and the Python code will be established by differential testing over generated policies and claims (the test suite already enumerates every deny reason). The trusted computing base for release decisions is then the verifier (signature and chain checks, 450 lines), the policy function (90 lines) and the KBS loop (60 lines). \textbf{{[}TODO{]}}: write the Lean model; report specification and proof sizes.
+The model abstracts the hardware signature as an unforgeable signature by the chip and treats the verifier as correct; it will not find a parsing bug, a wrong reference value in the policy, or a side channel.
+
+\textbf{Executable policy specification.} The policy function, \texttt{evaluate(policy,\ claims,\ now)}, is total, pure and operates on frozen records of strings and integers, and it is the one piece that must agree exactly between the KBS and every client. It will be written once in Lean 4 with a few algebraic theorems (monotonicity: enlarging an allow-list or lowering a minimum TCB can only turn denials into releases, never the reverse; component-wise TCB: a shortfall in any component implies denial whatever the other components; debug or an unlisted guest policy implies denial), and the usual objection, that the verified model is not the code that runs, is removed by running it: Lean 4 compiles to a native binary, and the KBS and the client SDK will call that binary as the policy engine. Until then the Python function and the Lean function are kept in agreement by differential testing over generated policies and claims (the test suite already enumerates every denial reason). The trusted computing base for release decisions is then the verifier (signature and chain checks, 450 lines of Python), the policy specification and the KBS loop (60 lines).
+
+\textbf{{[}TODO{]}}: the symbolic model and its results; the Lean specification with its line counts and proof sizes; the differential-test harness.
 
 \section{Implementation}\label{implementation}
 
@@ -294,7 +300,7 @@ The end-to-end suite exercises the negative paths on the live VM: a policy with 
 
 \section{Conclusion}\label{conclusion}
 
-AttestRAG shows that a RAG pipeline can run entirely inside confidential VMs and be verified as one object by the party whose data it handles. On real SEV-SNP hardware, attestation and key release cost tens of milliseconds per session, retrieval inside the TEE is lossless, and the measured boot chain turns every pipeline component into a policy decision. What remains is the GPU stage and its binding to the VM, the formal model of the policy engine, and the comparison against unprotected and inference-only deployments that will decide whether the end-to-end overhead target holds.
+AttestRAG shows that a RAG pipeline can run entirely inside confidential VMs and be verified as one object by the party whose data it handles. On real SEV-SNP hardware, attestation and key release cost tens of milliseconds per session, retrieval inside the TEE is lossless, and the measured boot chain turns every pipeline component into a policy decision. What remains is the GPU stage and its binding to the VM, the formal analysis of the release protocol, and the comparison against unprotected and inference-only deployments that will decide whether the end-to-end overhead target holds.
 
 \appendix
 
@@ -315,7 +321,8 @@ Client verifies before upload; sealed answers & done & SDK, e2e \\
 Multi-tenant keys, permission-aware retrieval & design &  \\
 Intel TDX verifier, VLEK reports & TODO &  \\
 GPU confidential VM for generation & design & host has 4x H200 NVL; CC mode not yet enabled \\
-Lean model and proofs of the policy engine & TODO & engine written to be formalizable \\
+Symbolic model of the release protocol (Tamarin/ProVerif) & TODO & properties stated in Section 6 \\
+Executable policy specification (Lean 4) + differential tests & TODO & engine written to be formalizable \\
 Comparison against unprotected and inference-only baselines & TODO &  \\
 RGB end-to-end numbers on SEV-SNP, CPU-only & done & docs/benchmarks.md \\
 \bottomrule\end{tabular}
