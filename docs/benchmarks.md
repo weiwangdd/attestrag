@@ -177,6 +177,41 @@ far inside the CPU-only envelope (1.4–3.2 s single user, 0.3 q/s at 8 users). 
 request after model load took 35 s (CUDA warm-up) and is the "max" in `bench-gpu7b-*.json`;
 exclude it when quoting tails.
 
+### What confidential computing costs: the same pipeline in a plain VM (A1, 2026-10-23)
+
+Unprotected baseline: the identical step-11 image booted as an ordinary QEMU VM (no SEV-SNP,
+standard OVMF, `launch-snpvm.sh plain`), GPU3 switched to normal mode with NVIDIA's admin tool
+and passed through the same way, both llama servers on CUDA, the node started with
+`--attester mock-insecure` and the KBS/client with `--insecure-mock` (a public mock vendor,
+`policies/insecure-baseline.json`; it proves nothing and exists only for this comparison).
+Everything else is byte-identical: models, corpus, questions, sealing, HTTP path.
+
+| 7B generator, GPU | CVM + CC GPU | plain VM + plain GPU | overhead |
+|---|---|---|---|
+| session setup (attestation + policy) | 0.062 s | 0.017 s (mock) | +45 ms |
+| en: ask p50 / p90 | 0.46 / 0.63 s | 0.36 / 0.53 s | +30 % / +18 % |
+| zh: ask p50 / p90 | 0.62 / 0.87 s | 0.54 / 0.76 s | +16 % / +14 % |
+| en: 1 user (sweep) p50 | 0.44 s | 0.28 s | +57 % |
+| en: 8 users q/s | 3.55 | 4.21 | −16 % |
+| zh: 8 users q/s | 2.64 | 3.36 | −21 % |
+| accuracy / rejection | 0.975 / 0.35, 0.99 / 0.35 | 0.975 / 0.35, 0.99 / 0.30 | none |
+
+So the end-to-end price of confidential computing for this pipeline is 16–30 % on the median
+answer at one user and 16–21 % of throughput at eight, with the quality unchanged. That is
+more than the 4–8 % reported for the model call alone on Hopper at large batch: at batch 1 a
+7B decode is a stream of small kernels, and in CC mode every submission crosses the encrypted
+driver/GPU channel, so launch latency rather than compute dominates; the CVM adds bounce
+buffering for every virtio and GPU DMA on top. Batching (8 users) amortises the first part,
+which is why the gap narrows. The 10 % end-to-end target therefore holds only under load,
+not for a single interactive user. The first request after model load takes ~30 s in both
+configurations (CUDA warm-up, not CC).
+
+**What could not be measured.** The GPU half of the overhead cannot be isolated by attaching
+a normal-mode GPU to the SEV-SNP VM: the NVIDIA driver refuses
+(`confComputeConstructEngine: GPU confidential compute capability is not enabled … Cannot
+attach gpu`), so inside a CVM the GPU must be in CC mode. The two halves (CVM, CC GPU) are
+only separable with a plain VM plus a CC-mode GPU, which NVIDIA does not support either.
+
 ## Reproduce
 
 ```bash
@@ -187,6 +222,6 @@ python scripts/rag_bench.py --node http://127.0.0.1:8081 --policy ~/snp/policy-h
 ```
 
 Raw results: `bench-{zh,en}_refine.json`, `bench-*-sweep.json`, `bench-gpu-*.json` (GPU, 1.5B) and
-`bench-gpu7b-*.json` (GPU, 7B) on h200 in `~/snp`
+`bench-gpu7b-*.json` (GPU, 7B) and `bench-plain7b-*.json` (plain VM baseline) on h200 in `~/snp`
 (per-question answers, hits, latencies). The RGB files are downloaded to
 `~/.cache/attestrag/rgb/` on first use.

@@ -1,0 +1,11 @@
+{
+  "_comment": "UNPROTECTED BASELINE ONLY: accepts the public insecure-baseline mock vendor (node --attester mock-insecure, KBS/client --insecure-mock). Proves nothing; used to measure the same pipeline in a plain VM.",
+  "allowed_cpu_platforms": [
+    "mock-cpu"
+  ],
+  "allowed_measurements": [
+    "c37fbed80572ed926ef521648e64b908e94682bb7b74c572adbcd9fa405cf97c7b1f9c3c299362972984eca573516d2f"
+  ],
+  "min_tcb": {},
+  "allowed_guest_policy": []
+}

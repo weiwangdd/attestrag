@@ -26,6 +26,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--product", choices=["Milan", "Genoa", "Turin"])
     ap.add_argument("--kds-cache")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    ap.add_argument("--insecure-mock", action="store_true",
+                    help="also trust the public insecure-baseline mock vendor (unprotected baseline only; proves nothing)")
     sub.add_parser("verify", help="only verify the node's evidence and print claims")
     up = sub.add_parser("upload"); up.add_argument("file"); up.add_argument("--id"); up.add_argument("--type", default="text/plain")
     ask = sub.add_parser("ask"); ask.add_argument("question"); ask.add_argument("-k", type=int, default=4)
@@ -33,6 +35,10 @@ def main(argv: list[str] | None = None) -> None:
 
     verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product),
                                    Platform.NVIDIA_CC: NvidiaVerifier()})
+    if args.insecure_mock:
+        from .attest.mock import insecure_baseline_verifier
+        print("WARNING: --insecure-mock: accepting evidence from the public mock vendor; nothing is protected", file=sys.stderr)
+        verifier = CompositeVerifier({**verifier.verifiers, Platform.MOCK_CPU: insecure_baseline_verifier()})
     client = AttestRAGClient(HttpNodeTransport(args.node), verifier, Policy.from_json(Path(args.policy).read_text()))
     try:
         c = client.connect()

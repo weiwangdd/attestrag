@@ -7,6 +7,7 @@ verify -> release key -> ingest -> retrieve -> generate path is testable anywher
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import json
 import time
@@ -28,9 +29,11 @@ def _raw_pub(k: Ed25519PublicKey) -> bytes:
 
 
 class MockVendor:
-    def __init__(self, name: str = "mock-vendor"):
+    def __init__(self, name: str = "mock-vendor", seed: bytes | None = None):
         self.name = name
-        self._key = Ed25519PrivateKey.generate()
+        # seed: deterministic key so that separate processes (node, KBS, client) can agree on one vendor.
+        # Only for the insecure baseline below; a seeded vendor is public knowledge, hence no security.
+        self._key = Ed25519PrivateKey.from_private_bytes(hashlib.sha256(b"attestrag-mock-vendor" + seed).digest()) if seed else Ed25519PrivateKey.generate()
 
     @property
     def root_public(self) -> bytes:
@@ -104,3 +107,25 @@ class MockVerifier(Verifier):
             issued_at=float(body["issued_at"]),
             signer=body["signer"],
         )
+
+
+INSECURE_BASELINE_MEASUREMENT = hashlib.sha384(b"attestrag-insecure-baseline: no TEE, no attestation").hexdigest()
+
+
+def insecure_baseline_vendor() -> MockVendor:
+    """The one public mock vendor behind `--attester mock-insecure` / `--insecure-mock`.
+
+    Used to run the identical pipeline in an ordinary VM as the unprotected baseline of the
+    evaluation. Its key is derived from a fixed string, so anyone can mint "evidence": a KBS
+    or client that trusts it protects nothing, and both print that at start.
+    """
+    return MockVendor("insecure-baseline", seed=b"attestrag-insecure-baseline-v1")
+
+
+def insecure_baseline_attester() -> MockAttester:
+    return MockAttester(insecure_baseline_vendor(), MockTEEConfig(measurement=INSECURE_BASELINE_MEASUREMENT, tcb={}))
+
+
+def insecure_baseline_verifier() -> MockVerifier:
+    v = insecure_baseline_vendor()
+    return MockVerifier({v.name: v.root_public})

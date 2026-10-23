@@ -11,6 +11,8 @@ CPUS=${CPUS:-32}
 SSH_PORT=${SSH_PORT:-2222}
 NODE_PORT=${NODE_PORT:-8081}   # host port forwarded to the node service (guest :8080)
 MODE=${1:-snp}; [ $# -gt 0 ] && shift   # snp | plain
+# plain mode: the AmdSev OVMF only boots a -kernel through its SEV hashes table; use the standard build
+[ "$MODE" = plain ] && OVMF=${PLAIN_OVMF:-/usr/share/ovmf/OVMF.fd}
 KERNEL=$D/images/vmlinuz
 VERITY=${VERITY:-1}   # 1 = dm-verity read-only root (rootfs.raw + rootfs.hash) with tmpfs overlayroot; 0 = plain qcow2 root
 if [ "$VERITY" = 1 ]; then

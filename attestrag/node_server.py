@@ -60,13 +60,20 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--gpu", action="append", default=[], metavar="INDEX|auto",
                     help="NVML index of a confidential-computing GPU whose attestation is bound into every report "
                          "(repeatable); 'auto' = every GPU that can produce an attestation report, none if there is no GPU")
+    ap.add_argument("--attester", choices=["snp", "mock-insecure"], default="snp",
+                    help="mock-insecure: NO attestation (public mock vendor), for the unprotected baseline in a plain VM only")
     args = ap.parse_args(argv)
 
     gpus: list[NvidiaAttester] = []
     for g in args.gpu:
         gpus += [NvidiaAttester(i) for i in (_probe_gpus() if g == "auto" else [int(g)])]
     print(f"[node] GPU attesters: {[a.index for a in gpus] or 'none'}", file=sys.stderr)
-    attester = CompositeAttester(SnpAttester(), gpus)
+    if args.attester == "mock-insecure":
+        from .attest.mock import insecure_baseline_attester
+        print("[node] WARNING: --attester mock-insecure: this node proves nothing (unprotected baseline)", file=sys.stderr)
+        attester = CompositeAttester(insecure_baseline_attester(), gpus)
+    else:
+        attester = CompositeAttester(SnpAttester(), gpus)
     for url in (args.llm, args.embed):
         if url:
             _wait_http(url.rstrip("/") + "/models", args.wait)

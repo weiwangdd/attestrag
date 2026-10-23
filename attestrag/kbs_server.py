@@ -47,12 +47,18 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--product", choices=["Milan", "Genoa", "Turin"])
     ap.add_argument("--kds-cache", help="VCEK cache dir (default ~/.cache/attestrag/kds)")
     ap.add_argument("--nonce-ttl", type=float, default=60.0)
+    ap.add_argument("--insecure-mock", action="store_true",
+                    help="also trust the public insecure-baseline mock vendor (unprotected baseline only; proves nothing)")
     args = ap.parse_args(argv)
 
     policy = Policy.from_json(Path(args.policy).read_text())
     keys = load_keys(Path(args.keys), tuple(args.key_id or ["index-dek"]))
     verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product),
                                    Platform.NVIDIA_CC: NvidiaVerifier()})
+    if args.insecure_mock:
+        from .attest.mock import insecure_baseline_verifier
+        print("WARNING: --insecure-mock: accepting evidence from the public mock vendor; nothing is protected", file=sys.stderr)
+        verifier = CompositeVerifier({**verifier.verifiers, Platform.MOCK_CPU: insecure_baseline_verifier()})
     kbs = ReferenceKBS(verifier, policy, nonce_ttl_s=args.nonce_ttl)
     for k, v in keys.items():
         kbs.put_key(k, v)

@@ -107,6 +107,10 @@ def overlaps(hit: str, passages: list[str], window: int = 120) -> bool:
 def make_client(args) -> tuple[AttestRAGClient, float]:
     verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product),
                                    Platform.NVIDIA_CC: NvidiaVerifier()})
+    if args.insecure_mock:
+        from attestrag.attest.mock import insecure_baseline_verifier
+        print("WARNING: --insecure-mock: accepting evidence from the public mock vendor; nothing is protected", file=sys.stderr)
+        verifier = CompositeVerifier({**verifier.verifiers, Platform.MOCK_CPU: insecure_baseline_verifier()})
     client = AttestRAGClient(HttpNodeTransport(args.node, timeout=args.timeout), verifier,
                              Policy.from_json(Path(args.policy).read_text()))
     t = time.perf_counter()
@@ -219,6 +223,8 @@ def main(argv=None) -> None:
     ap.add_argument("--policy", required=True)
     ap.add_argument("--product", choices=["Milan", "Genoa", "Turin"])
     ap.add_argument("--kds-cache")
+    ap.add_argument("--insecure-mock", action="store_true",
+                    help="also trust the public insecure-baseline mock vendor (unprotected baseline only; proves nothing)")
     ap.add_argument("--dataset", default="zh_refine", choices=sorted(RGB_ROWS))
     ap.add_argument("--data-dir", default=str(Path.home() / ".cache" / "attestrag" / "rgb"))
     ap.add_argument("--limit", type=int, default=100, help="questions to sample (0 = all)")
