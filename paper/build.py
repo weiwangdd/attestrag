@@ -47,6 +47,9 @@ TABLES = [  # in order of appearance: (float env, column spec, label, caption, l
     ("table", "p{1.6in}p{0.95in}p{0.95in}", "tab:gpu",
      "The confidential GPU configuration: same image and corpus, H200 NVL in CC mode attached to the VM, both llama.cpp servers on CUDA.",
      "`Table~\\ref{tab:gpu}`{=latex} gives the numbers."),
+    ("table", "p{1.2in}p{1.05in}p{1.05in}", "tab:model",
+     "Generator size on the confidential GPU: Qwen2.5-1.5B against Qwen2.5-7B (both Q4\\_K\\_M), same image family, corpus and questions.",
+     "`Table~\\ref{tab:model}`{=latex} compares the two generators."),
     ("table*", "p{2.6in}p{1.3in}p{2.45in}", "tab:status",
      "Status of each claim in this draft.", "`Table~\\ref{tab:status}`{=latex} lists every claim with its status."),
 ]

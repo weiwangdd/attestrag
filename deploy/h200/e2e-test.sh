@@ -78,14 +78,11 @@ mkpolicy() {  # $1 out, $2 measurement, $3 min snp
 JSON
 }
 if [ -n "${POLICY:-}" ]; then cp "$POLICY" "$TMP/good.json"; else mkpolicy "$TMP/good.json" "$EXPECTED" "$MIN_TCB_SNP"; fi
-# the in-guest demo attests the CPU only (no GPU attester in attestrag.demo yet): same policy minus the GPU requirement
-python3 -c "import json,sys; d=json.load(open(sys.argv[1])); d['require_gpu']=False; json.dump(d, open(sys.argv[2],'w'))" "$TMP/good.json" "$TMP/demo-good.json"
 mkpolicy "$TMP/bad-measurement.json" "$(printf '0%.0s' $(seq 1 96))" "$MIN_TCB_SNP"
 mkpolicy "$TMP/bad-tcb.json" "$EXPECTED" 99
-"$G" -c "$TMP/demo-good.json" "/tmp/e2e-good.json" >/dev/null
-for f in bad-measurement bad-tcb; do "$G" -c "$TMP/$f.json" "/tmp/e2e-$f.json" >/dev/null; done
+for f in good bad-measurement bad-tcb; do "$G" -c "$TMP/$f.json" "/tmp/e2e-$f.json" >/dev/null; done
 
-run_demo() { "$G" "sudo $PY -m attestrag.demo --snp --policy /tmp/e2e-$1.json" > "$TMP/out-$1.txt" 2>&1; }  # "good" uses demo-good.json (see above)
+run_demo() { "$G" "sudo $PY -m attestrag.demo --snp --gpu auto --policy /tmp/e2e-$1.json" > "$TMP/out-$1.txt" 2>&1; }
 
 run_demo good
 check "demo: KBS releases key to expected measurement" \

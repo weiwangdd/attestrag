@@ -67,23 +67,30 @@ def mock_main() -> None:
     run_flow(attester, CompositeVerifier({Platform.MOCK_CPU: mv, Platform.MOCK_GPU: mv}), policy)
 
 
-def snp_main(policy_path: str | None, product: str | None) -> None:
+def snp_main(policy_path: str | None, product: str | None, gpu: list[str] | None = None) -> None:
+    from .attest.nvidia import NvidiaAttester, NvidiaVerifier, gpu_indices
     from .attest.snp import SnpAttester, SnpVerifier
 
-    attester = CompositeAttester(SnpAttester())
-    verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(product=product)})
+    gpus = gpu_indices(gpu or [])
+    print(f"GPU attesters: {gpus or 'none'}", file=sys.stderr)
+    attester = CompositeAttester(SnpAttester(), [NvidiaAttester(i) for i in gpus])
+    verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(product=product), Platform.NVIDIA_CC: NvidiaVerifier()})
     if policy_path:
         with open(policy_path) as f:
             policy = Policy.from_json(f.read())
     else:
         rd = cpu_report_data(os.urandom(32), bytes(32))
-        probe = verifier.verify(attester.attest(rd), rd).cpu
+        claims = verifier.verify(attester.attest(rd), rd)
+        probe = claims.cpu
         print("WARNING: no --policy given; trusting observed measurement/TCB (TOFU).", file=sys.stderr)
         observed = {
             "allowed_cpu_platforms": ["sev-snp"],
             "allowed_measurements": [probe.measurement],
             "min_tcb": probe.tcb,
         }
+        if claims.gpus:
+            observed.update({"require_gpu": True, "allowed_gpu_platforms": ["nvidia-cc"],
+                             "allowed_gpu_measurements": sorted({g.measurement for g in claims.gpus})})
         print("observed policy (save and pass with --policy):")
         print(json.dumps(observed, indent=2))
         print("report extras:", json.dumps(probe.extra, indent=2))
@@ -97,9 +104,11 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--policy", help="policy JSON file (SNP mode)")
     ap.add_argument("--product", choices=["Milan", "Genoa", "Turin"],
                     help="AMD product, needed only if the report lacks CPUID fields")
+    ap.add_argument("--gpu", action="append", default=[], metavar="INDEX|auto",
+                    help="SNP mode: also attest this NVIDIA CC GPU (repeatable; auto = every CC GPU found)")
     args = ap.parse_args(argv)
     if args.snp:
-        snp_main(args.policy, args.product)
+        snp_main(args.policy, args.product, args.gpu)
     else:
         mock_main()
 

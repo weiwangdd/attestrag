@@ -37,24 +37,8 @@ def _wait_http(url: str, timeout: float) -> None:
 
 
 def _probe_gpus() -> list[int]:
-    """Indices of GPUs that answer the attestation-certificate query (i.e. are in CC mode)."""
-    try:
-        import pynvml
-        pynvml.nvmlInit()
-    except Exception as e:  # noqa: BLE001 - no driver / no GPU is a normal CPU-only boot
-        print(f"[node] no GPU attestation ({e})", file=sys.stderr)
-        return []
-    try:
-        out = []
-        for i in range(pynvml.nvmlDeviceGetCount()):
-            try:
-                pynvml.nvmlDeviceGetConfComputeGpuCertificate(pynvml.nvmlDeviceGetHandleByIndex(i))
-                out.append(i)
-            except Exception as e:  # noqa: BLE001
-                print(f"[node] gpu {i}: not attestable ({e})", file=sys.stderr)
-        return out
-    finally:
-        pynvml.nvmlShutdown()
+    from .attest.nvidia import probe_cc_gpus
+    return probe_cc_gpus()
 
 
 def main(argv: list[str] | None = None) -> None:

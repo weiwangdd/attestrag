@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import struct
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -224,6 +225,38 @@ class NvidiaVerifier(Verifier):
             signer="nvidia-device-identity-ca",
             extra=extra,
         )
+
+
+def probe_cc_gpus() -> list[int]:
+    """Indices of GPUs that answer the attestation-certificate query, i.e. are in CC mode ([] without a driver)."""
+    try:
+        import pynvml
+        pynvml.nvmlInit()
+    except Exception as e:  # noqa: BLE001 - no driver / no GPU is a normal CPU-only boot
+        print(f"[attest] no GPU attestation ({e})", file=sys.stderr)
+        return []
+    try:
+        out = []
+        for i in range(pynvml.nvmlDeviceGetCount()):
+            try:
+                pynvml.nvmlDeviceGetConfComputeGpuCertificate(pynvml.nvmlDeviceGetHandleByIndex(i))
+                out.append(i)
+            except Exception as e:  # noqa: BLE001
+                print(f"[attest] GPU {i}: no CC attestation ({e})", file=sys.stderr)
+        return out
+    finally:
+        try:
+            pynvml.nvmlShutdown()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def gpu_indices(spec: list[str]) -> list[int]:
+    """--gpu INDEX|auto (repeatable) -> sorted unique indices; 'auto' = every CC-mode GPU found."""
+    out: set[int] = set()
+    for g in spec:
+        out.update(probe_cc_gpus() if g == "auto" else [int(g)])
+    return sorted(out)
 
 
 class NvidiaAttester(Attester):

@@ -1,7 +1,7 @@
 # RAG benchmark on the h200 CVM
 
 Measured 2026-10-20 against the running node on h200 (SEV-SNP guest, 32 vCPUs, 16 GB,
-CPU-only llama.cpp, GPU results from 2026-10-23 at the end: Qwen3-Embedding-0.6B Q8_0 + Qwen2.5-1.5B-Instruct Q4_K_M, Qdrant in tmpfs).
+CPU-only llama.cpp, GPU and 7B results from 2026-10-23 at the end: Qwen3-Embedding-0.6B Q8_0 + Qwen2.5-1.5B-Instruct Q4_K_M, Qdrant in tmpfs).
 Everything goes through the attested client path: attestation + policy check, encrypted
 upload, encrypted question, sealed answer. Script: `scripts/rag_bench.py`.
 
@@ -152,6 +152,31 @@ The GPU session costs show up in "connect": verifying the SPDM transcript (ECDSA
 over 64 measurement blocks) and the 5-certificate chain adds ~30 ms over the CPU-only
 session.
 
+### Generator size: Qwen2.5-7B-Instruct on the GPU (step-11 image, 2026-10-23)
+
+Same GPU configuration, same corpus and questions, generator swapped for Qwen2.5-7B-Instruct
+Q4_K_M (the 1.5B file stays in the image; `CHAT_MODEL=1.5b` in `guest-llm-setup.sh`
+selects it). 7.7 GB of device memory, 334 tokens/s became ~130 tokens/s.
+
+| | 1.5B zh | 7B zh | 1.5B en | 7B en |
+|---|---|---|---|---|
+| answer accuracy (RGB alias match) | 0.95 | **0.99** | 0.975 | 0.975 |
+| held out: rejection ("context insufficient") | 0.05 | **0.35** | 0.05 | **0.35** |
+| false rejection on answerable questions | 0.00 | 0.00 | 0.00 | 0.025 |
+| held out: answered correctly from memory | 0.00 | 0.00 | 0.05 | 0.10 |
+| ask, k=4, p50 / p90 | 0.28 / 0.34 s | 0.62 / 0.87 s | 0.17 / 0.21 s | 0.46 / 0.63 s |
+| 8 users: q/s, p50 | 6.7, 1.07 s | 2.6, 2.64 s | 7.1, 1.04 s | 3.6, 1.87 s |
+
+The size change buys exactly what the small model lacked: negative rejection goes from 5 %
+to 35 % in both languages (7 of 20 held-out questions refused instead of 1), Chinese
+accuracy rises to 0.99, and the English model now also answers 2 more held-out questions
+correctly from pretraining. 35 % is still not a safe gate (RGB reports ~45 % for ChatGPT on
+its harder noise setting); the remaining fix is a relevance threshold or verifier pass, not a
+bigger model. Cost: 2.5x the single-user latency and half the 8-user throughput, both still
+far inside the CPU-only envelope (1.4–3.2 s single user, 0.3 q/s at 8 users). The first
+request after model load took 35 s (CUDA warm-up) and is the "max" in `bench-gpu7b-*.json`;
+exclude it when quoting tails.
+
 ## Reproduce
 
 ```bash
@@ -161,6 +186,7 @@ python scripts/rag_bench.py --node http://127.0.0.1:8081 --policy ~/snp/policy-h
 # corpus persists in the sealed Qdrant snapshot: later runs can pass --skip-ingest
 ```
 
-Raw results: `bench-{zh,en}_refine.json` and `bench-*-sweep.json` on h200 in `~/snp`
+Raw results: `bench-{zh,en}_refine.json`, `bench-*-sweep.json`, `bench-gpu-*.json` (GPU, 1.5B) and
+`bench-gpu7b-*.json` (GPU, 7B) on h200 in `~/snp`
 (per-question answers, hits, latencies). The RGB files are downloaded to
 `~/.cache/attestrag/rgb/` on first use.
