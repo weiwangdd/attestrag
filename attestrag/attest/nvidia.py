@@ -12,8 +12,11 @@ in the AK certificate equals the one the report carries, and reduce the DMTF
 measurement blocks to one composite digest that a policy can pin.
 
 Binding to the CPU session: the composite attester hands every GPU attester
-gpu_report_data(cpu_rd) (48 bytes); NVIDIA reports carry a 32-byte nonce, so the
-first 32 bytes are used on both sides.
+gpu_report_data(cpu_rd) (48 bytes); the SPDM request carries a 32-byte nonce, so
+the first 32 bytes are used on both sides. Note that the MEASUREMENTS response has
+its own nonce, chosen by the GPU (SPDM 1.1 section 10.11): freshness comes from the
+requester nonce, which the signature covers as part of the request half of the
+transcript, not from the response nonce.
 
 Not done here: golden-measurement (RIM) lookup and OCSP revocation, which nvtrust's
 local verifier adds on top of the same checks; see docs/threat-model.md.
@@ -55,10 +58,11 @@ ROOTS_DIR = Path(__file__).parent / "nvidia_roots"
 class GpuReport:
     request: bytes
     response: bytes
-    nonce: bytes
+    nonce: bytes                                  # requester nonce (the binding), from the GET_MEASUREMENTS request
     measurements: tuple[tuple[int, bytes], ...]  # (index, DMTF measurement value)
     opaque: dict[str, bytes] = field(default_factory=dict)
     signature: bytes = b""
+    responder_nonce: bytes = b""                  # GPU-chosen nonce in the MEASUREMENTS response
 
     @property
     def signed_data(self) -> bytes:
@@ -77,6 +81,14 @@ class GpuReport:
         v = self.opaque.get(name)
         return v.split(b"\0", 1)[0].decode("ascii", "replace") if v else ""
 
+    @property
+    def vbios_version(self) -> str:
+        """VBIOS as nvidia-smi prints it ("96.00.b7.00.02"); the GPU sends 5 binary bytes."""
+        v = self.opaque.get("vbios_version", b"")
+        if len(v) >= 5 and not all(32 <= b < 127 for b in v.rstrip(b"\0")):
+            return f"{v[3]:02x}.{v[2]:02x}.{v[1]:02x}.{v[0]:02x}.{v[4]:02x}"
+        return self.opaque_str("vbios_version").lower()
+
     @classmethod
     def parse(cls, blob: bytes) -> "GpuReport":
         if len(blob) <= REQUEST_LEN + SIGNATURE_LEN:
@@ -92,17 +104,15 @@ class GpuReport:
         if len(record) != rec_len:
             raise AttestationError("truncated measurement record")
         pos += rec_len
-        nonce = resp[pos:pos + NONCE_LEN]
+        responder_nonce = resp[pos:pos + NONCE_LEN]
         pos += NONCE_LEN
         opaque_len = int.from_bytes(resp[pos:pos + 2], "little")
         pos += 2
         opaque_raw = resp[pos:pos + opaque_len]
         pos += opaque_len
         sig = resp[pos:pos + SIGNATURE_LEN]
-        if len(nonce) != NONCE_LEN or len(opaque_raw) != opaque_len or len(sig) != SIGNATURE_LEN or pos + SIGNATURE_LEN != len(resp):
+        if len(responder_nonce) != NONCE_LEN or len(opaque_raw) != opaque_len or len(sig) != SIGNATURE_LEN or pos + SIGNATURE_LEN != len(resp):
             raise AttestationError("malformed SPDM MEASUREMENTS response")
-        if nonce != req_nonce:
-            raise AttestationError("response nonce does not match request nonce")
         measurements = []
         i = 0
         for _ in range(n_blocks):
@@ -129,7 +139,7 @@ class GpuReport:
             j += 4
             opaque[OPAQUE_FIELDS.get(ftype, f"field_{ftype}")] = opaque_raw[j:j + fsize]
             j += fsize
-        return cls(req, resp, nonce, tuple(measurements), opaque, sig)
+        return cls(req, resp, req_nonce, tuple(measurements), opaque, sig, responder_nonce)
 
 
 def load_pem_chain(pem: bytes) -> list[x509.Certificate]:
@@ -189,7 +199,7 @@ class NvidiaVerifier(Verifier):
         except Exception as e:  # noqa: BLE001
             raise AttestationError("bad GPU report signature") from e
         if rep.nonce != expected_report_data[:NONCE_LEN]:
-            raise AttestationError("GPU report nonce does not match the expected binding")
+            raise AttestationError("GPU request nonce does not match the expected binding")
         fwid = rep.opaque.get("fwid")
         if fwid:
             cf = cert_fwid(leaf)
@@ -197,7 +207,7 @@ class NvidiaVerifier(Verifier):
                 raise AttestationError("firmware ID in the AK certificate does not match the report")
         extra = {
             "driver_version": rep.opaque_str("driver_version"),
-            "vbios_version": rep.opaque_str("vbios_version").lower(),
+            "vbios_version": rep.vbios_version,
             "fwid": (fwid or b"").hex(),
             "measurement_count": str(len(rep.measurements)),
             "ak_subject": leaf.subject.rfc4514_string(),

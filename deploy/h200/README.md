@@ -22,7 +22,7 @@ Everything below runs as user `weiwang` without sudo (user in `kvm` group, `/dev
 
 | script | runs on | purpose |
 |---|---|---|
-| `launch-snpvm.sh [snp\|plain]` | host | start the VM. Env: `VERITY=1/0`, `KH=on/off`, `CPUS`, `MEM`, `SSH_PORT`. Default = SNP + kernel-hashes + dm-verity root + tmpfs overlay |
+| `launch-snpvm.sh [snp\|plain]` | host | start the VM. Env: `VERITY=1/0`, `KH=on/off`, `CPUS`, `MEM`, `SSH_PORT`, `GPU=<pci addr>` (pass a CC-mode GPU through; `PCI_HOLE`, `MMIO64MB` size the 64-bit MMIO window, `DEBUGCON=file` captures OVMF debug output). Default = SNP + kernel-hashes + dm-verity root + tmpfs overlay |
 | `g 'cmd'` / `g -c file dest` | host | run a command in / copy a file into the guest (ssh port 2222) |
 | `build-verity-image.sh [outdir]` | host | golden qcow2 -> `rootfs.raw` + `rootfs.hash` + root hash + expected measurement (fixed salt, reproducible) |
 | `guest-verity-setup.sh` | guest (sudo) | one-time: initramfs hook + local-top script for dm-verity, fstab fixes, rebuild initrd |
@@ -30,6 +30,9 @@ Everything below runs as user `weiwang` without sudo (user in `kvm` group, `/dev
 | `guest-llm-setup.sh` | guest (sudo) | llama.cpp b11753 + Qwen3-Embedding-0.6B Q8_0 + Qwen2.5-1.5B-Instruct Q4_K_M into `/opt/llm` (sha256-pinned, inside the measured image); systemd units `llama-embed` (:8090), `llama-chat` (:8091), `attestrag-node` (boots into attest -> key -> serve; KBS URL in `/etc/attestrag/node.env`) |
 | `guest-qdrant-setup.sh` | guest (sudo) | Qdrant v1.19.2 (sha256-pinned) into `/opt/qdrant`, storage on `/run/qdrant` (tmpfs), `qdrant.service`; node switched to `--vector-store qdrant` (sealed snapshots in `/var/lib/attestrag`) |
 | `guest-attestrag-setup.sh <src.tgz>` | guest (sudo) | install attestRAG + numpy/cryptography into `/opt/attestrag` (venv), fstab entry for the data disk. Source tarball: `git archive --format=tgz -o attestrag-src.tgz HEAD` |
+| `guest-gpu-setup.sh` | guest (sudo) | NVIDIA 580 open kernel modules + user space, llama.cpp CUDA build (sha256-pinned) next to the CPU build, `run-llama.sh` selector (CUDA when a GPU is present), `nvidia-cc-ready.service` (persistence mode + CC ready state before the servers start), `nvidia-ml-py` for the node's GPU attester, `--gpu auto` in `node.env` |
+| `gpu3-cc-on.sh` | host (sudo) | put GPU3 (`0000:44:00.0`) into CC mode with NVIDIA's gpu-admin-tools, hand it to `vfio-pci`, open `/dev/vfio/<group>`, `/dev/iommu` and the vfio cdev to the launching user |
+| `gpu3-release-cycle.sh` | host | the unbind only completes once no process holds `/dev/nvidia3`, and every CUDA/NVML process on the host opens all four device nodes: stops the host's GPU services and daemons in order, waits for the detach, starts them again (5–10 min outage of the other three GPUs' services) |
 | `guest-snpguest-setup.sh` | guest | download `snpguest` v0.10.0 |
 | `guest-attest.sh` | guest (sudo) | fetch an attestation report through configfs-tsm, no external tools |
 | `guest-verify.sh` | guest | request report, fetch ARK/ASK/VCEK from AMD KDS, verify chain + signature |
@@ -86,6 +89,46 @@ exist in encrypted guest RAM. After each ingest the node snapshots the collectio
 snapshot with the KBS-released key and writes `qdrant-<collection>.snapshot.enc` to the data
 disk; at start it unseals into `/run/attestrag` (tmpfs) and recovers the collection. A host
 that edits or swaps the file gets an AES-GCM tag failure, and the node refuses to start.
+
+## GPU confidential computing (step 4)
+
+One H200 NVL (GPU3, `0000:44:00.0`) is passed through to the CVM in NVIDIA confidential-computing
+mode; the other three GPUs keep serving the host's own workloads. What it took, in order:
+
+1. **Host**: `sudo bash gpu3-cc-on.sh` switches the GPU to CC mode (gpu-admin-tools, reset) and
+   binds it to `vfio-pci`. The unbind blocks inside the driver until every holder of `/dev/nvidia3`
+   is gone, and NVML opens *all* `/dev/nvidiaN` nodes in every CUDA process, so the host's vLLM
+   services (user units) and `nvidia-dcgm` / `nvidia-persistenced` all count: `gpu3-release-cycle.sh`
+   stops them, lets the detach finish and restarts them. While the GPU is half-detached, every new
+   CUDA process on the host fails with `cudaGetDeviceCount: invalid device ordinal` (NVML counts 4,
+   CUDA 3), so the cycle is the only way forward once the switch has started.
+2. **Launch**: `GPU=0000:44:00.0 ./launch-snpvm.sh snp` (or `GPU=... bash relaunch.sh`). The
+   additions, each the fix for a failure on the way:
+   `-cpu EPYC-v4,host-phys-bits=on` (a 512 GB hole needs more than the model's 40 physical bits;
+   CPUID is not in the launch measurement), `-object iommufd` + `iommufd=` on the device (the legacy
+   type1 container caps DMA mappings at 65,535, too few for guest_memfd shared/private conversion),
+   a 512 GB `pci-hole64-size` and `X-PciMmio64Mb=524288` (H200 NVL BAR1 is 256 GB; with a 1 TB
+   window OVMF spun in its page-table walk for over 15 minutes), and a `pcie-root-port` with
+   `x-speed=32,x-width=16` in front of the GPU (on the root bus the driver reports "Unknown PCIe
+   speed", and `cuInit` returns `CUDA_ERROR_NOT_INITIALIZED` although attestation works).
+3. **Guest** (`guest-gpu-setup.sh`, baked into the image): the Ubuntu `linux-modules-nvidia-580-open`
+   package needs `depmod` run in the image build or `systemd-modules-load` cannot find `nvidia`;
+   `nvidia-cc-ready.service` sets persistence mode and the CC ready state before llama-embed,
+   llama-chat and the node start (CUDA refuses to initialise until the ready state is set);
+   `run-llama.sh` picks the CUDA build with `-ngl 99` when `/dev/nvidia0` exists.
+4. **Evidence**: the node (`--gpu auto`) fetches the SPDM GET_MEASUREMENTS transcript and the
+   attestation-key chain through NVML for every CC GPU and ships them with the SNP report. The
+   verifier (`attestrag/attest/nvidia.py`) chains the AK certificate to the pinned NVIDIA Device
+   Identity CA, checks the ECDSA P-384 signature over request || response, checks the *request*
+   nonce against `gpu_report_data(cpu_rd)` (the response nonce is chosen by the GPU, as SPDM
+   specifies), matches the firmware ID in the certificate against the report, and reduces the 64
+   DMTF measurement blocks to one SHA-384 that the policy pins (`allowed_gpu_measurements`,
+   `require_gpu` in `policies/h200-genoa.json`). A real transcript is the golden case in
+   `tests/fixtures/nvidia/h200/`.
+
+The host sees the GPU as `vfio-pci` and nothing else: `nvidia-smi -L` lists three GPUs. Inside the
+guest `nvidia-smi conf-compute -q` reports `CC State: ON`, `CPU CC Capabilities: AMD SEV-SNP`.
+Benchmark numbers for the GPU configuration are in `docs/benchmarks.md`.
 
 ## Measurement chain
 

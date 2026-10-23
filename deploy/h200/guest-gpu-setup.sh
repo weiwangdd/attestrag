@@ -32,6 +32,10 @@ apt-get install -y -qq --no-install-recommends \
 # the CC driver path needs the open modules only; make sure nothing pulls the proprietary one
 apt-mark hold nvidia-driver-580 2>/dev/null || true
 echo "nvidia" > /etc/modules-load.d/nvidia.conf
+# the modules package drops its .ko files under kernel/nvidia-580-open but modules.dep was not rebuilt
+# in the image build (systemd-modules-load then says "Failed to find module 'nvidia'"): index them now
+depmod -a "$(uname -r)"
+modinfo -n nvidia >/dev/null || { echo "nvidia module not indexed" >&2; exit 1; }
 # bounce buffers for CC DMA: the kernel cmdline carries swiotlb=262144 (see launch-snpvm.sh)
 
 echo "[2/4] llama.cpp CUDA build (same tag as the CPU build) + CUDA runtime libs"
@@ -60,6 +64,30 @@ chmod +x "$LLM/run-llama.sh"
 for u in llama-embed llama-chat; do
   sed -i "s#^ExecStart=$LLM/llama/llama-server #ExecStart=$LLM/run-llama.sh #" /etc/systemd/system/$u.service
   grep -q "run-llama.sh" /etc/systemd/system/$u.service || { echo "unit $u not rewritten" >&2; exit 1; }
+done
+systemctl daemon-reload
+
+# CC mode: CUDA refuses to initialise until the guest sets the GPU "ready state"; persistence mode keeps the
+# SPDM session up between clients. One oneshot unit, ordered before the servers that use the GPU.
+# (The node's attestation does not depend on this: NVML returns the report in any ready state.)
+cat > /etc/systemd/system/nvidia-cc-ready.service <<'EOF'
+[Unit]
+Description=NVIDIA CC GPU: persistence mode + ready state (no-op without a GPU)
+After=systemd-modules-load.service
+ConditionPathExists=/dev/nvidiactl
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'nvidia-smi -pm 1 && nvidia-smi conf-compute -srs 1 && nvidia-smi conf-compute -q'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable nvidia-cc-ready.service
+for u in llama-embed llama-chat attestrag-node; do
+  mkdir -p /etc/systemd/system/$u.service.d
+  printf '[Unit]\nAfter=nvidia-cc-ready.service\nWants=nvidia-cc-ready.service\n' > /etc/systemd/system/$u.service.d/gpu.conf
 done
 systemctl daemon-reload
 

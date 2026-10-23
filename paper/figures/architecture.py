@@ -79,8 +79,8 @@ W, H = 1090, 670
 
 # --- frames -----------------------------------------------------------------
 frame(20, 20, 1050, 450, "h200 host (untrusted: hypervisor, operator, disk, network)   AMD EPYC 9554, SEV firmware 1.55")
-frame(330, 55, 520, 385, "SEV-SNP confidential VM, 32 vCPU - measured image: OVMF + kernel-hashes (vmlinuz, initrd, cmdline) + dm-verity rootfs", "#7a3030")
-frame(330, 535, 400, 112, "customer trust domain", "#1e7d3a")
+frame(330, 55, 520, 385, "SEV-SNP confidential VM, 32 vCPU + H200 NVL (CC mode) - measured: OVMF + kernel-hashes + dm-verity rootfs", "#7a3030")
+frame(330, 535, 400, 130, "customer trust domain", "#1e7d3a")
 
 # --- client ----------------------------------------------------------------------
 box(30, 195, 170, 115, "Client SDK / CLI", ["attestrag.sdk", "verify evidence + policy JSON", "(same checks as the KBS)",
@@ -89,22 +89,28 @@ box(30, 195, 170, 115, "Client SDK / CLI", ["attestrag.sdk", "verify evidence + 
 # --- node process ------------------------------------------------------------------
 box(350, 95, 200, 310, "attestrag-node :8080", ["one Python process (attestrag.node_server)"], kind="primary", r=8)
 box(365, 140, 170, 55, "transport.JsonServer", ["/attestation  /ingest  /query"], sub_size=9.5)
-box(365, 205, 170, 68, "SnpAttester", ["configfs-tsm report", "report_data = H(nonce || pk)"], sub_size=9.5)
+box(365, 205, 170, 68, "Snp + Nvidia attester", ["configfs-tsm report; NVML transcript", "cpu_rd = H(nonce || pk); gpu = H(cpu_rd)"], sub_size=9)
 box(365, 283, 170, 55, "ingest + retrieve", ["parse, chunk (800 chars), top-k"], sub_size=9.5)
 box(365, 348, 170, 50, "KBSClient", ["ephemeral X25519 key; unwraps DEK"], sub_size=9.5)
 
 # --- services in the VM ---------------------------------------------------------
-box(660, 110, 170, 68, "llama-embed :8090", ["Qwen3-Embedding-0.6B Q8_0", "dim 1024, 32 threads"])
-box(660, 215, 170, 68, "Qdrant :6333", ["storage on /run/qdrant (tmpfs)", "= encrypted guest RAM"], kind="accent")
-box(660, 320, 170, 68, "llama-chat :8091", ["Qwen2.5-1.5B-Instruct Q4_K_M", "16k KV cache, 4 slots, 32 threads"])
+box(660, 100, 170, 60, "llama-embed :8090", ["Qwen3-Embedding-0.6B Q8_0", "dim 1024; CUDA build, -ngl 99"])
+box(660, 190, 170, 60, "Qdrant :6333", ["storage on /run/qdrant (tmpfs)", "= encrypted guest RAM"], kind="accent")
+box(660, 280, 170, 60, "llama-chat :8091", ["Qwen2.5-1.5B-Instruct Q4_K_M", "16k KV cache, 4 slots; CUDA build"])
+box(660, 374, 170, 58, "H200 NVL, CC mode", ["vfio passthrough, SPDM-protected PCIe,", "bounce buffers; attested via NVML"], kind="primary", sub_size=9)
+arrow([(745, 340), (745, 374)], None, None, both=True, kind="muted")
+text(752, 361, "CUDA (both servers)", 8.5, fill=MUTED, anchor="start")
+arrow([(700, 160), (700, 190)], None, None, both=True, kind="muted")
+arrow([(700, 250), (700, 280)], None, None, both=True, kind="muted")
 
 # --- untrusted disk ----------------------------------------------------------------
 box(880, 200, 170, 98, "data disk (untrusted)", ["/var/lib/attestrag", "qdrant-attestrag.snapshot.enc", "AES-256-GCM, AAD = collection|dim",
                                               "written after every ingest,", "restored at node start"], kind="muted", sub_size=9.5)
 
 # --- KBS and KDS ----------------------------------------------------------------
-box(350, 560, 360, 74, "KBS :8800  (attestrag.kbs_server)", ["today a host process on 127.0.0.1", "SnpVerifier: ARK pin, chain, hwID, SPL, signature, report_data",
-                                                              "policy engine: measurement, min TCB, guest policy  |  kbs-keys.json, audit"],
+box(350, 558, 360, 96, "KBS :8800  (attestrag.kbs_server)", ["today a host process on 127.0.0.1", "SnpVerifier: ARK pin, chain, hwID, SPL, signature, report_data",
+                                                              "NvidiaVerifier: NVIDIA root pin, P-384, request nonce, FWID, 64-block digest",
+                                                              "policy engine: measurement, min TCB, guest policy, GPU digest  |  keys, audit"],
     kind="ok", sub_size=9.5)
 box(30, 560, 170, 62, "AMD KDS", ["VCEK per chip + TCB", "(fetched once, cached on disk)"], kind="muted")
 
@@ -113,10 +119,10 @@ arrow([(200, 240), (350, 240)], "nonce -> evidence;\nupload and question\nwrappe
 arrow([(350, 268), (200, 268)], "answer sealed with the\none-time reply_key", (275, 285), size=9)
 text(275, 311, "HTTP: host :8081 -> guest :8080", 8.5, fill=MUTED)
 
-arrow([(550, 150), (660, 150)], "chunks, query -> vectors", (605, 141), both=True, size=9)
-arrow([(550, 250), (660, 250)], "upsert; search top-k", (605, 241), both=True, size=9)
-arrow([(550, 355), (660, 355)], "prompt: context +\nquestion", (605, 336), size=9)
-text(605, 370, "-> answer", 9, fill=MUTED)
+arrow([(550, 130), (660, 130)], "chunks, query -> vectors", (605, 121), both=True, size=9)
+arrow([(550, 220), (660, 220)], "upsert; search top-k", (605, 211), both=True, size=9)
+arrow([(550, 310), (660, 310)], "prompt: context +\nquestion", (605, 291), size=9)
+text(605, 325, "-> answer", 9, fill=MUTED)
 arrow([(830, 250), (880, 250)], None, None, both=True, kind="accent")
 text(855, 236, "sealed", 9, fill=MUTED)
 text(855, 270, "snapshot", 9, fill=MUTED)
@@ -134,7 +140,7 @@ text(750, 565, "dashed frame = trust boundary; solid box = process or file", 9.5
 text(750, 579, "red = attested code;  green = key release;", 9.5, fill=MUTED, anchor="start")
 text(750, 593, "orange = plaintext only in encrypted guest RAM;", 9.5, fill=MUTED, anchor="start")
 text(750, 607, "grey = untrusted or external", 9.5, fill=MUTED, anchor="start")
-text(750, 629, "AttestRAG on h200, state of the code on 2026-10-21", 9.5, fill=MUTED, anchor="start")
+text(750, 629, "AttestRAG on h200, state of the code on 2026-10-23", 9.5, fill=MUTED, anchor="start")
 
 svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" font-family="{FONT}">'
        f'<rect width="{W}" height="{H}" fill="#ffffff"/>' + markers() + "".join(parts) + "</svg>")

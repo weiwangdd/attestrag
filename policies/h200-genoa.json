@@ -3,7 +3,7 @@
     "sev-snp"
   ],
   "allowed_measurements": [
-    "1ea22cde2e19a653b267117e6cbfeeab8b7e0e047a4e0b6af35555260be8e6888bde27ef6b65c3b7bb0328ee942552ac"
+    "61f99944ec1f9a1d43d92636f3e809f37a2ed4a3af5cfb21152ded88d28ad9a1bd3008e8df457fc3eb5c675f29ca6f1a"
   ],
   "min_tcb": {
     "bootloader": 10,
@@ -13,5 +13,12 @@
   },
   "allowed_guest_policy": [
     "0x30000"
+  ],
+  "require_gpu": true,
+  "allowed_gpu_platforms": [
+    "nvidia-cc"
+  ],
+  "allowed_gpu_measurements": [
+    "9b573c96a1ed738a259ce721c34bd83101b58865bbb6cd9101b2655bfaebdef9c6661d54eb8f715391f08a36a52ab56c"
   ]
 }

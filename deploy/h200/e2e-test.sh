@@ -78,11 +78,14 @@ mkpolicy() {  # $1 out, $2 measurement, $3 min snp
 JSON
 }
 if [ -n "${POLICY:-}" ]; then cp "$POLICY" "$TMP/good.json"; else mkpolicy "$TMP/good.json" "$EXPECTED" "$MIN_TCB_SNP"; fi
+# the in-guest demo attests the CPU only (no GPU attester in attestrag.demo yet): same policy minus the GPU requirement
+python3 -c "import json,sys; d=json.load(open(sys.argv[1])); d['require_gpu']=False; json.dump(d, open(sys.argv[2],'w'))" "$TMP/good.json" "$TMP/demo-good.json"
 mkpolicy "$TMP/bad-measurement.json" "$(printf '0%.0s' $(seq 1 96))" "$MIN_TCB_SNP"
 mkpolicy "$TMP/bad-tcb.json" "$EXPECTED" 99
-for f in good bad-measurement bad-tcb; do "$G" -c "$TMP/$f.json" "/tmp/e2e-$f.json" >/dev/null; done
+"$G" -c "$TMP/demo-good.json" "/tmp/e2e-good.json" >/dev/null
+for f in bad-measurement bad-tcb; do "$G" -c "$TMP/$f.json" "/tmp/e2e-$f.json" >/dev/null; done
 
-run_demo() { "$G" "sudo $PY -m attestrag.demo --snp --policy /tmp/e2e-$1.json" > "$TMP/out-$1.txt" 2>&1; }
+run_demo() { "$G" "sudo $PY -m attestrag.demo --snp --policy /tmp/e2e-$1.json" > "$TMP/out-$1.txt" 2>&1; }  # "good" uses demo-good.json (see above)
 
 run_demo good
 check "demo: KBS releases key to expected measurement" \
@@ -127,7 +130,7 @@ if "$HOSTPY" -c 'import attestrag' 2>/dev/null; then
   fi
   # run a private node for the test (own data dir, same port as the service)
   "$G" "sudo systemctl stop attestrag-node.service 2>/dev/null; sudo pkill -f '[a]ttestrag.node_server'; sudo rm -rf /var/lib/attestrag/e2e" >/dev/null 2>&1
-  "$G" "sudo sh -c 'nohup $PY -m attestrag.node_server --kbs http://10.0.2.2:$KBS_PORT --data-dir /var/lib/attestrag/e2e $LLM_ARGS > /tmp/e2e-node.log 2>&1 &'" >/dev/null 2>&1
+  "$G" "sudo sh -c 'nohup $PY -m attestrag.node_server --kbs http://10.0.2.2:$KBS_PORT --data-dir /var/lib/attestrag/e2e --gpu auto $LLM_ARGS > /tmp/e2e-node.log 2>&1 &'" >/dev/null 2>&1
   for _ in $(seq 1 60); do curl -fs "http://127.0.0.1:$NODE_PORT/healthz" >/dev/null 2>&1 && break; sleep 1; done
   check "node in guest got its key from the KBS and serves host :$NODE_PORT" \
     curl -fs "http://127.0.0.1:$NODE_PORT/healthz" -o /dev/null
@@ -152,7 +155,7 @@ if "$HOSTPY" -c 'import attestrag' 2>/dev/null; then
     check "node used QdrantStore" bash -c "$G 'cat /tmp/e2e-node.log' | grep -q 'vector store=QdrantStore'"
     # reboot-like: drop the live collection, restart the node -> it must restore from the sealed snapshot
     "$G" "curl -fs -X DELETE http://127.0.0.1:6333/collections/e2e >/dev/null; sudo pkill -f '[a]ttestrag.node_server'; sleep 1" >/dev/null 2>&1
-    "$G" "sudo sh -c 'nohup $PY -m attestrag.node_server --kbs http://10.0.2.2:$KBS_PORT --data-dir /var/lib/attestrag/e2e $LLM_ARGS > /tmp/e2e-node2.log 2>&1 &'" >/dev/null 2>&1
+    "$G" "sudo sh -c 'nohup $PY -m attestrag.node_server --kbs http://10.0.2.2:$KBS_PORT --data-dir /var/lib/attestrag/e2e --gpu auto $LLM_ARGS > /tmp/e2e-node2.log 2>&1 &'" >/dev/null 2>&1
     for _ in $(seq 1 60); do curl -fs "http://127.0.0.1:$NODE_PORT/healthz" >/dev/null 2>&1 && break; sleep 1; done
     check "restarted node restored the collection from the sealed snapshot" \
       bash -c "$G 'cat /tmp/e2e-node2.log' | grep -q 'index has 1 chunks'"

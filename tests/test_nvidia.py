@@ -3,12 +3,15 @@
 No GPU here: a test CA stands in for NVIDIA's Device Identity CA, an AK certificate
 carries a DICE FWID extension, and the transcript is laid out exactly as the GPU
 returns it (37-byte request || MEASUREMENTS response with a raw P-384 signature).
-A real H200 transcript becomes a golden fixture once the GPU passes through.
+A real H200 transcript (tests/fixtures/nvidia/h200) is the golden case: captured
+inside the SEV-SNP guest with the GPU in CC mode.
 """
 
 import datetime as dt
 import hashlib
+import json
 import struct
+from pathlib import Path
 
 import pytest
 from cryptography import x509
@@ -54,7 +57,8 @@ def transcript(ak_key, nonce: bytes, blocks, opaque: dict[int, bytes], tamper=No
     req = bytes([0x11, 0xE0, 0x01, 0xFF]) + nonce + bytes([0])
     record = b"".join(bytes([idx, 1]) + len(dmtf(v)).to_bytes(2, "little") + dmtf(v) for idx, v in blocks)
     opq = b"".join(struct.pack("<HH", t, len(v)) + v for t, v in opaque.items())
-    body = bytes([0x11, 0x60, 0, 0, len(blocks)]) + len(record).to_bytes(3, "little") + record + nonce + len(opq).to_bytes(2, "little") + opq
+    responder_nonce = hashlib.sha256(b"gpu-chosen" + nonce).digest()  # the GPU picks its own, as SPDM says
+    body = bytes([0x11, 0x60, 0, 0, len(blocks)]) + len(record).to_bytes(3, "little") + record + responder_nonce + len(opq).to_bytes(2, "little") + opq
     der = ak_key.sign(req + body, ec.ECDSA(hashes.SHA384()))
     r, s = decode_dss_signature(der)
     sig = r.to_bytes(48, "big") + s.to_bytes(48, "big")
@@ -74,7 +78,7 @@ def test_parse_layout(pki):
     _, _, ak_key, _ = pki
     nonce = bytes(range(NONCE_LEN))
     rep = GpuReport.parse(transcript(ak_key, nonce, BLOCKS, OPAQUE))
-    assert rep.nonce == nonce and len(rep.measurements) == 3 and rep.measurements[0] == (1, BLOCKS[0][1])
+    assert rep.nonce == nonce and rep.responder_nonce != nonce and len(rep.measurements) == 3 and rep.measurements[0] == (1, BLOCKS[0][1])
     assert rep.opaque_str("driver_version") == "580.196.07" and rep.opaque["fwid"] == FWID
     assert len(rep.signature) == 96 and rep.signed_data == transcript(ak_key, nonce, BLOCKS, OPAQUE)[:-96]
 
@@ -141,3 +145,22 @@ def test_pinned_nvidia_root_is_loaded():
     v = NvidiaVerifier()
     subjects = [r.subject.rfc4514_string() for r in v.roots.values()]
     assert any("NVIDIA Device Identity CA" in s for s in subjects)
+
+
+FIX = Path(__file__).parent / "fixtures" / "nvidia" / "h200"
+
+
+def test_real_h200_transcript_verifies_against_pinned_root():
+    meta = json.loads((FIX / "meta.json").read_text())
+    blob, chain, nonce = (FIX / "report.bin").read_bytes(), (FIX / "ak-chain.pem").read_bytes(), (FIX / "nonce.bin").read_bytes()
+    rep = GpuReport.parse(blob)
+    assert rep.nonce == nonce and rep.responder_nonce != nonce and len(rep.measurements) == 64
+    v = NvidiaVerifier(clock=lambda: meta["verify_at"])
+    c = v.verify(Evidence(Platform.NVIDIA_CC, blob, b"", (chain,)), nonce + bytes(16))
+    assert c.signer == "nvidia-device-identity-ca" and c.extra["driver_version"] == "580.178.04"
+    assert c.extra["vbios_version"] == "96.00.b7.00.02"  # 5 binary bytes on the wire, nvidia-smi notation here
+    assert c.extra["ak_subject"].startswith("CN=GH100 A01 GSP FMC LF") and len(c.extra["fwid"]) == 96
+    assert c.measurement == rep.composite_measurement.hex()
+    # the request nonce is what binds: any other session value is rejected
+    with pytest.raises(AttestationError):
+        v.verify(Evidence(Platform.NVIDIA_CC, blob, b"", (chain,)), hashlib.sha384(b"other").digest())

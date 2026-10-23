@@ -26,11 +26,22 @@ else
 fi
 KH=${KH:-on}   # kernel-hashes: on = measure kernel/initrd/cmdline into launch digest
 GPU=${GPU:-}   # optional PCI address of a GPU in CC mode bound to vfio-pci (e.g. 0000:44:00.0); passed through to the guest
-GPUARGS=()
+GPUARGS=()   # a 512 GB hole needs > 40 phys bits, hence host-phys-bits=on on the -cpu line (CPUID is not in the launch measurement)
 if [ -n "$GPU" ]; then
-  # 64-bit MMIO window large enough for the H200 BARs (BAR1 = 128 GB): tell both QEMU and OVMF
-  GPUARGS=(-device vfio-pci,host="$GPU" -global q35-pcihost.pci-hole64-size=1T -fw_cfg name=opt/ovmf/X-PciMmio64Mb,string=1048576)
+  # 64-bit MMIO window large enough for the H200 BARs (BAR1 = 256 GiB): tell both QEMU and OVMF
+  # iommufd backend: the legacy type1 container caps DMA mappings at 65535, too few for guest_memfd shared/private conversion
+  PCI_HOLE=${PCI_HOLE:-512G}          # QEMU 64-bit PCI hole (q35-pcihost); 1T made OVMF spin for >15 min
+  MMIO64MB=${MMIO64MB:-524288}        # OVMF 64-bit MMIO aperture in MiB (H200 NVL BAR1 = 256 GiB, so >= 524288)
+  # behind a PCIe root port with a real link speed: on the root bus the RM reports "Unknown PCIe speed"
+  # (NV_ERR_INVALID_STATE) and cuInit fails with CUDA_ERROR_NOT_INITIALIZED although attestation works
+  GPUARGS=(-object iommufd,id=iommufd0
+           -device pcie-root-port,id=gpu-rp,bus=pcie.0,chassis=9,slot=9,x-speed=32,x-width=16
+           -device vfio-pci,host="$GPU",bus=gpu-rp,iommufd=iommufd0
+           -global q35-pcihost.pci-hole64-size="$PCI_HOLE" -fw_cfg name=opt/ovmf/X-PciMmio64Mb,string="$MMIO64MB")
 fi
+DEBUGCON=${DEBUGCON:-}   # file for OVMF DEBUG output (isa-debugcon at 0x402), e.g. DEBUGCON=ovmf.debug.log
+DBGARGS=()
+[ -n "$DEBUGCON" ] && DBGARGS=(-debugcon file:"$DEBUGCON" -global isa-debugcon.iobase=0x402)
 DATA=${DATA:-$D/images/data.qcow2}   # optional persistent, untrusted data disk (encrypted index lives here)
 if [ -f "$DATA" ]; then
   DISKS+=(-drive file="$DATA",if=none,id=data0,format=qcow2 -device virtio-blk-pci,drive=data0,serial=attestrag-data,disable-legacy=on,iommu_platform=true)
@@ -47,10 +58,10 @@ if [ "$MODE" = snp ]; then
 fi
 
 exec "$QEMU" \
-  -name snpvm -enable-kvm -machine "$MACHINE" -cpu EPYC-v4 -smp "$CPUS" -m "$MEM" \
+  -name snpvm -enable-kvm -machine "$MACHINE" -cpu EPYC-v4,host-phys-bits=on -smp "$CPUS" -m "$MEM" \
   -bios "$OVMF" \
   -kernel "$KERNEL" -initrd "$INITRD" -append "$APPEND" \
-  "${DISKS[@]}" "${GPUARGS[@]}" \
+  "${DISKS[@]}" "${GPUARGS[@]}" "${DBGARGS[@]}" \
   -drive file="$SEED",if=none,id=seed0,format=raw,readonly=on -device virtio-blk-pci,drive=seed0,disable-legacy=on,iommu_platform=true \
   -netdev user,id=net0,hostfwd=tcp::${SSH_PORT}-:22,hostfwd=tcp::${NODE_PORT}-:8080 -device virtio-net-pci,netdev=net0,disable-legacy=on,iommu_platform=true,romfile= \
   -device virtio-rng-pci,disable-legacy=on,iommu_platform=true \

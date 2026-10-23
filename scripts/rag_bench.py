@@ -38,6 +38,7 @@ import urllib.request
 from pathlib import Path
 
 from attestrag.attest import CompositeVerifier, Platform
+from attestrag.attest.nvidia import NvidiaVerifier
 from attestrag.attest.snp import KdsClient, SnpVerifier
 from attestrag.policy import Policy
 from attestrag.sdk import AttestRAGClient
@@ -104,7 +105,8 @@ def overlaps(hit: str, passages: list[str], window: int = 120) -> bool:
 
 # --- client -------------------------------------------------------------------
 def make_client(args) -> tuple[AttestRAGClient, float]:
-    verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product)})
+    verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product),
+                                   Platform.NVIDIA_CC: NvidiaVerifier()})
     client = AttestRAGClient(HttpNodeTransport(args.node, timeout=args.timeout), verifier,
                              Policy.from_json(Path(args.policy).read_text()))
     t = time.perf_counter()

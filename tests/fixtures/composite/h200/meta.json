@@ -1,0 +1,8 @@
+{
+  "label": "attestrag-h200-composite-v8-2026-10-23",
+  "report_data": "e2733bb4c711bf1d69c0312d38bde08988d50eca7003248770a591595bb300c9061e3609bb68d50f4bdb64aff64a303d",
+  "gpu_report_data": "d904c5759fcb300fc14f3f3c5edb701be46875093a86f154ab0ff782cc7a4b0accafd058d05468b67a50d6605c6644d1",
+  "snp_measurement": "61f99944ec1f9a1d43d92636f3e809f37a2ed4a3af5cfb21152ded88d28ad9a1bd3008e8df457fc3eb5c675f29ca6f1a",
+  "note": "bound pair captured inside the SEV-SNP guest on h200 with H200 NVL GPU3 in CC mode (step-10 image, driver 580.178.04): SNP report through configfs-tsm over report_data || 16 zero bytes, GPU SPDM transcript through NVML over the first 32 bytes of gpu_report_data(report_data); the GPU half is bound to the CPU half exactly as the node does it.",
+  "verify_at": 1792713600
+}

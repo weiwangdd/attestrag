@@ -1,0 +1,6 @@
+{
+  "source": "H200 NVL (10de:233b) passed through in CC mode to the SEV-SNP guest on h200, driver 580.178.04 open, NVML 13.580.178.04, captured 2026-10-23",
+  "nonce": "first 32 bytes of SHA-384('attestrag-h200-gpu-dump-2026-10-23'); stored in nonce.bin",
+  "verify_at": 1792713600,
+  "note": "report.bin = SPDM GET_MEASUREMENTS request (37 B) || signed MEASUREMENTS response; ak-chain.pem = 5-cert attestation key chain ending in the NVIDIA Device Identity CA"
+}

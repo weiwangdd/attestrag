@@ -314,7 +314,11 @@ def test_h200_policy_file_allows_and_pins(h200):
     meta, raw, v = h200
     c = v.verify(Evidence(Platform.SEV_SNP, raw, b""), bytes.fromhex(meta["report_data"]))
     pol = Policy.from_json(POLICY_FILE.read_text())
-    assert evaluate(pol, CompositeClaims(c), meta["verify_at"]).allow
+    # the published policy requires the GPU half too (tests/test_composite_h200.py has the bound pair)
+    assert evaluate(pol, CompositeClaims(c), meta["verify_at"]).reasons == ("gpu: GPU evidence required but none presented",)
+    cpu_only = Policy(**{**pol.__dict__, "require_gpu": False})
+    assert evaluate(cpu_only, CompositeClaims(c), meta["verify_at"]).allow
+    pol = cpu_only
     stricter = Policy(**{**pol.__dict__, "min_tcb": {**pol.min_tcb, "snp": 25}})
     assert "cpu: tcb 'snp'=24 < required 25" in evaluate(stricter, CompositeClaims(c), meta["verify_at"]).reasons
     assert pol.allowed_guest_policy == frozenset({0x30000})

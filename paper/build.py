@@ -44,6 +44,9 @@ TABLES = [  # in order of appearance: (float env, column spec, label, caption, l
     ("table*", "lrlrlr", "tab:sweep",
      "Concurrency sweep: $N$ clients, each with its own attested session, 16 unseen questions per level.",
      "`Table~\\ref{tab:sweep}`{=latex} shows the sweep."),
+    ("table", "p{1.6in}p{0.95in}p{0.95in}", "tab:gpu",
+     "The confidential GPU configuration: same image and corpus, H200 NVL in CC mode attached to the VM, both llama.cpp servers on CUDA.",
+     "`Table~\\ref{tab:gpu}`{=latex} gives the numbers."),
     ("table*", "p{2.6in}p{1.3in}p{2.45in}", "tab:status",
      "Status of each claim in this draft.", "`Table~\\ref{tab:status}`{=latex} lists every claim with its status."),
 ]

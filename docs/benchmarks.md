@@ -1,7 +1,7 @@
 # RAG benchmark on the h200 CVM
 
 Measured 2026-10-20 against the running node on h200 (SEV-SNP guest, 32 vCPUs, 16 GB,
-CPU-only llama.cpp: Qwen3-Embedding-0.6B Q8_0 + Qwen2.5-1.5B-Instruct Q4_K_M, Qdrant in tmpfs).
+CPU-only llama.cpp, GPU results from 2026-10-23 at the end: Qwen3-Embedding-0.6B Q8_0 + Qwen2.5-1.5B-Instruct Q4_K_M, Qdrant in tmpfs).
 Everything goes through the attested client path: attestation + policy check, encrypted
 upload, encrypted question, sealed answer. Script: `scripts/rag_bench.py`.
 
@@ -114,6 +114,43 @@ What to change next, in order of expected effect:
    (e.g. 8 + 24), or embed queries on the chat server's idle time.
 3. GPU CC (step 4 of the plan): prompt processing at 700 tok/s is the whole budget;
    an H200 in CC mode does the same in milliseconds.
+
+### GPU confidential computing (step 4, measured 2026-10-23)
+
+Same image family, same corpus already sealed on the data disk (`--skip-ingest`), same
+100 questions and sweep questions, but H200 NVL GPU3 of the host passed through to the
+CVM in NVIDIA confidential-computing mode (`deploy/h200/gpu3-cc-on.sh`, `GPU=0000:44:00.0`)
+and both llama-servers on the CUDA build with every layer offloaded. The node now sends
+GPU evidence too, and the policy requires it (`require_gpu`, the composite GPU
+measurement pinned), so "connect" below includes verifying the NVIDIA transcript and
+its certificate chain as well as the SNP report.
+
+| | zh_refine | en_refine |
+|---|---|---|
+| connect (SNP + GPU evidence, policy) | 0.07 s | 0.06 s |
+| answer accuracy (RGB alias match) | 0.95 | 0.975 |
+| hit@4 / false rejection / held-out rejection | 1.00 / 0.00 / 0.05 | 1.00 / 0.00 / 0.05 |
+| ask, k=4 | p50 0.28 s, p90 0.34 s | p50 0.17 s, p90 0.21 s |
+| 1 user | 4.9 q/s, p50 0.21 s | 4.9 q/s, p50 0.19 s |
+| 2 users | 5.0 q/s, p50 0.37 s, p90 0.57 s | 1.7 q/s, p50 0.39 s, p90 6.9 s |
+| 4 users | 3.7 q/s, p50 0.57 s, p90 2.1 s | 6.7 q/s, p50 0.58 s, p90 0.83 s |
+| 8 users | 6.7 q/s, p50 1.07 s, p90 1.34 s | 7.1 q/s, p50 1.04 s, p90 1.29 s |
+
+An answer is now 8x (English) to 11x (Chinese) faster than on 32 vCPUs, and 8 users get
+25x the CPU throughput (7 q/s against 0.29): generation runs at 330–390 tokens/s and prompt
+processing is no longer the budget, so the per-user cost is retrieval plus a few hundred
+milliseconds of generation. The Chinese/English gap shrinks from 2.3x to 1.6x because the
+longer Chinese prompts are cheap on the GPU. Quality is unchanged (same models), the
+negative-rejection weakness is the same. The two p90 outliers (6.9 s at 2 users, 2.1 s at
+4 users) are single slow requests, not errors; with the first configuration of the GPU
+image the embedding server also took ~9 s for its first request after start (warm-up).
+
+Nothing here is confidential-computing overhead in the GPU sense: the same llama.cpp build
+on an unprotected H200 was not measured in this round, and the 4–8 % that the ETH Zurich study reports for
+Hopper confidential mode (paper, related work) is well below the run-to-run noise of a 100-question sample.
+The GPU session costs show up in "connect": verifying the SPDM transcript (ECDSA P-384
+over 64 measurement blocks) and the 5-certificate chain adds ~30 ms over the CPU-only
+session.
 
 ## Reproduce
 
