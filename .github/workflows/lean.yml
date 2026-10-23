@@ -1,0 +1,29 @@
+name: lean
+
+on:
+  push:
+    branches: [main]
+    paths: ["lean/**", ".github/workflows/lean.yml"]
+  pull_request:
+    paths: ["lean/**", ".github/workflows/lean.yml"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lean
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install elan
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: No sorry / axiom / native_decide
+        run: |
+          if grep -rnE '\b(sorry|admit|axiom|native_decide)\b' --include='*.lean' .; then
+            echo "forbidden construct in Lean sources" >&2; exit 1
+          fi
+      - name: lake build
+        run: lake build --wfail

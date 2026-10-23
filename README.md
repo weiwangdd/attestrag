@@ -16,8 +16,10 @@ What makes it different:
 - **Clients verify before sending**: the SDK refuses to upload or query until the
   node's evidence is verified against the client's own policy; payloads are
   encrypted to a key bound into the attestation report.
-- **Formal policy (planned)**: the policy engine is a small total function so it
-  can be specified and proved in Lean.
+- **Formal policy**: the key-release decision (report_data binding, CPU↔GPU
+  binding, component-wise min TCB, the whole policy and the KBS release path) is
+  specified in Lean 4 under `lean/`, with a proof that any failed condition means no
+  key. Mapping to the Python code and modelling gaps: `docs/lean-correspondence.md`.
 
 > Status: milestone 1 — full flow works locally with **mock** attestation.
 > SEV-SNP attester (configfs-tsm) and verifier (pinned AMD ARK → ASK → VCEK via KDS)
@@ -48,6 +50,8 @@ deploy/gcp/  GCP N2D SEV-SNP VM deploy script
 deploy/h200/ self-hosted SEV-SNP CVM: QEMU launcher, reproducible dm-verity image build, reference measurements
 tests/       unit + end-to-end tests, incl. a real Genoa report (fixtures/snp/h200-genoa)
 docs/threat-model.md
+docs/lean-correspondence.md  Lean spec ↔ Python mapping
+lean/        Lean 4 spec and proofs of key release (`cd lean && lake build`)
 docs/benchmarks.md   RGB benchmark on the h200 CVM (scripts/rag_bench.py)
 ```
 
