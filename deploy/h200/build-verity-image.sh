@@ -72,7 +72,7 @@ veritysetup verify rootfs.raw rootfs.hash "$ROOTHASH"
 echo "      root hash = $ROOTHASH"
 
 echo "[5/6] expected launch measurement"
-APPEND="root=/dev/mapper/vroot ro rootflags=noload verity_dev=/dev/vda verity_hash=/dev/vdb roothash=$ROOTHASH overlayroot=tmpfs:recurse=0 console=ttyS0"
+APPEND="root=/dev/mapper/vroot ro rootflags=noload verity_dev=/dev/vda verity_hash=/dev/vdb roothash=$ROOTHASH overlayroot=tmpfs:recurse=0 swiotlb=262144 console=ttyS0"
 echo "$APPEND" > append.txt
 "$MEASURE" --mode snp --vcpus "$CPUS" --vcpu-type "$VCPU_TYPE" --ovmf "$OVMF" \
   --kernel "$KERNEL" --initrd "$INITRD" --append "$APPEND" > expected-measurement.txt

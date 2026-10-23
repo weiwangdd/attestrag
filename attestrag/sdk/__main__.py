@@ -13,6 +13,7 @@ from pathlib import Path
 
 from ..attest import CompositeVerifier, Platform
 from ..attest.snp import KdsClient, SnpVerifier
+from ..attest.nvidia import NvidiaVerifier
 from ..policy import Policy
 from . import AttestRAGClient, NodeUntrusted
 from .http import HttpNodeTransport
@@ -30,7 +31,8 @@ def main(argv: list[str] | None = None) -> None:
     ask = sub.add_parser("ask"); ask.add_argument("question"); ask.add_argument("-k", type=int, default=4)
     args = ap.parse_args(argv)
 
-    verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product)})
+    verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product),
+                                   Platform.NVIDIA_CC: NvidiaVerifier()})
     client = AttestRAGClient(HttpNodeTransport(args.node), verifier, Policy.from_json(Path(args.policy).read_text()))
     try:
         c = client.connect()

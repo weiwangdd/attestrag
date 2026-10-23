@@ -16,6 +16,7 @@ from pathlib import Path
 
 from .attest import CompositeVerifier, Platform
 from .attest.snp import KdsClient, SnpVerifier
+from .attest.nvidia import NvidiaVerifier
 from .common.crypto import new_key
 from .kbs_client import ReferenceKBS, kbs_routes
 from .policy import Policy
@@ -50,7 +51,8 @@ def main(argv: list[str] | None = None) -> None:
 
     policy = Policy.from_json(Path(args.policy).read_text())
     keys = load_keys(Path(args.keys), tuple(args.key_id or ["index-dek"]))
-    verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product)})
+    verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product),
+                                   Platform.NVIDIA_CC: NvidiaVerifier()})
     kbs = ReferenceKBS(verifier, policy, nonce_ttl_s=args.nonce_ttl)
     for k, v in keys.items():
         kbs.put_key(k, v)

@@ -16,15 +16,21 @@ VERITY=${VERITY:-1}   # 1 = dm-verity read-only root (rootfs.raw + rootfs.hash) 
 if [ "$VERITY" = 1 ]; then
   INITRD=$D/images/initrd.verity.img
   ROOTHASH=$(cat $D/images/roothash.txt)
-  APPEND=${APPEND:-"root=/dev/mapper/vroot ro rootflags=noload verity_dev=/dev/vda verity_hash=/dev/vdb roothash=$ROOTHASH overlayroot=tmpfs:recurse=0 console=ttyS0"}
+  APPEND=${APPEND:-"root=/dev/mapper/vroot ro rootflags=noload verity_dev=/dev/vda verity_hash=/dev/vdb roothash=$ROOTHASH overlayroot=tmpfs:recurse=0 swiotlb=262144 console=ttyS0"}
   DISKS=(-drive file=$D/images/rootfs.raw,if=none,id=root0,format=raw,readonly=on -device virtio-blk-pci,drive=root0,disable-legacy=on,iommu_platform=true
          -drive file=$D/images/rootfs.hash,if=none,id=hash0,format=raw,readonly=on -device virtio-blk-pci,drive=hash0,disable-legacy=on,iommu_platform=true)
 else
   INITRD=$D/images/initrd.img
-  APPEND=${APPEND:-"root=LABEL=cloudimg-rootfs ro console=ttyS0"}
+  APPEND=${APPEND:-"root=LABEL=cloudimg-rootfs ro swiotlb=262144 console=ttyS0"}
   DISKS=(-drive file="$DISK",if=none,id=disk0,format=qcow2 -device virtio-scsi-pci,id=scsi0,disable-legacy=on,iommu_platform=true -device scsi-hd,drive=disk0)
 fi
 KH=${KH:-on}   # kernel-hashes: on = measure kernel/initrd/cmdline into launch digest
+GPU=${GPU:-}   # optional PCI address of a GPU in CC mode bound to vfio-pci (e.g. 0000:44:00.0); passed through to the guest
+GPUARGS=()
+if [ -n "$GPU" ]; then
+  # 64-bit MMIO window large enough for the H200 BARs (BAR1 = 128 GB): tell both QEMU and OVMF
+  GPUARGS=(-device vfio-pci,host="$GPU" -global q35-pcihost.pci-hole64-size=1T -fw_cfg name=opt/ovmf/X-PciMmio64Mb,string=1048576)
+fi
 DATA=${DATA:-$D/images/data.qcow2}   # optional persistent, untrusted data disk (encrypted index lives here)
 if [ -f "$DATA" ]; then
   DISKS+=(-drive file="$DATA",if=none,id=data0,format=qcow2 -device virtio-blk-pci,drive=data0,serial=attestrag-data,disable-legacy=on,iommu_platform=true)
@@ -44,7 +50,7 @@ exec "$QEMU" \
   -name snpvm -enable-kvm -machine "$MACHINE" -cpu EPYC-v4 -smp "$CPUS" -m "$MEM" \
   -bios "$OVMF" \
   -kernel "$KERNEL" -initrd "$INITRD" -append "$APPEND" \
-  "${DISKS[@]}" \
+  "${DISKS[@]}" "${GPUARGS[@]}" \
   -drive file="$SEED",if=none,id=seed0,format=raw,readonly=on -device virtio-blk-pci,drive=seed0,disable-legacy=on,iommu_platform=true \
   -netdev user,id=net0,hostfwd=tcp::${SSH_PORT}-:22,hostfwd=tcp::${NODE_PORT}-:8080 -device virtio-net-pci,netdev=net0,disable-legacy=on,iommu_platform=true,romfile= \
   -device virtio-rng-pci,disable-legacy=on,iommu_platform=true \

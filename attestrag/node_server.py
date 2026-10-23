@@ -13,6 +13,7 @@ import sys
 
 from .attest import CompositeAttester
 from .attest.snp import SnpAttester
+from .attest.nvidia import NvidiaAttester
 from .embed import HashingEmbedder, OpenAIEmbedder
 from .generate import OpenAICompatibleGenerator, StubGenerator
 from .kbs_client import HttpKBS, KBSClient, KeyReleaseDenied
@@ -35,6 +36,27 @@ def _wait_http(url: str, timeout: float) -> None:
             time.sleep(2)
 
 
+def _probe_gpus() -> list[int]:
+    """Indices of GPUs that answer the attestation-certificate query (i.e. are in CC mode)."""
+    try:
+        import pynvml
+        pynvml.nvmlInit()
+    except Exception as e:  # noqa: BLE001 - no driver / no GPU is a normal CPU-only boot
+        print(f"[node] no GPU attestation ({e})", file=sys.stderr)
+        return []
+    try:
+        out = []
+        for i in range(pynvml.nvmlDeviceGetCount()):
+            try:
+                pynvml.nvmlDeviceGetConfComputeGpuCertificate(pynvml.nvmlDeviceGetHandleByIndex(i))
+                out.append(i)
+            except Exception as e:  # noqa: BLE001
+                print(f"[node] gpu {i}: not attestable ({e})", file=sys.stderr)
+        return out
+    finally:
+        pynvml.nvmlShutdown()
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="python -m attestrag.node_server")
     ap.add_argument("--listen", default="0.0.0.0:8080")
@@ -51,9 +73,16 @@ def main(argv: list[str] | None = None) -> None:
                     help="sealed = in-memory index persisted as one AES-GCM blob; qdrant = Qdrant in the CVM (tmpfs storage, sealed snapshots)")
     ap.add_argument("--qdrant-url", default="http://127.0.0.1:6333")
     ap.add_argument("--qdrant-collection", default="attestrag")
+    ap.add_argument("--gpu", action="append", default=[], metavar="INDEX|auto",
+                    help="NVML index of a confidential-computing GPU whose attestation is bound into every report "
+                         "(repeatable); 'auto' = every GPU that can produce an attestation report, none if there is no GPU")
     args = ap.parse_args(argv)
 
-    attester = CompositeAttester(SnpAttester())
+    gpus: list[NvidiaAttester] = []
+    for g in args.gpu:
+        gpus += [NvidiaAttester(i) for i in (_probe_gpus() if g == "auto" else [int(g)])]
+    print(f"[node] GPU attesters: {[a.index for a in gpus] or 'none'}", file=sys.stderr)
+    attester = CompositeAttester(SnpAttester(), gpus)
     for url in (args.llm, args.embed):
         if url:
             _wait_http(url.rstrip("/") + "/models", args.wait)
