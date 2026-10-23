@@ -126,6 +126,20 @@ mode; the other three GPUs keep serving the host's own workloads. What it took, 
    DMTF measurement blocks to one SHA-384 that the policy pins (`allowed_gpu_measurements`,
    `require_gpu` in `policies/h200-genoa.json`). A real transcript is the golden case in
    `tests/fixtures/nvidia/h200/`.
+5. **NVIDIA services** (`--gpu-rim` on the KBS, the SDK and the benchmark; `attestrag/attest/nvidia_rim.py`):
+   the verifier fetches NVIDIA's reference manifests for the driver (`NV_GPU_DRIVER_GH100_<version>`)
+   and the VBIOS (`NV_GPU_VBIOS_<project>_<sku>_<chip>_<vbios>`), checks each manifest's certificate
+   chain to the pinned NVIDIA CoRIM signing root and its XML signature (`signxml`), and compares every
+   active manifest entry with the report's measurement block of the same position (index 35 is skipped
+   when NVDEC0 is disabled, as on this card in CC mode); it also asks NVIDIA's OCSP responder about
+   every CA certificate of the attestation-key chain and of the manifest chains (delegated responder,
+   nonce, validity window). Results land in the claims (`rim_driver`, `rim_vbios`, `rim_matched`,
+   `ocsp`), and the policy can insist on them (`require_gpu_ocsp`, `require_gpu_rim`). Manifests and
+   OCSP responses are cached under `~/.cache/attestrag/nvidia`. As of 2026-10-23 NVIDIA publishes the
+   driver manifest for 580.178.04 (its 22 active entries match this H200) but no VBIOS manifest for
+   `1010_0230_894_9600B70002` (the id is built exactly as nvtrust does), so the h200 policy requires
+   OCSP and records, but does not require, the manifests; the pinned composite digest covers the VBIOS
+   blocks either way.
 
 The host sees the GPU as `vfio-pci` and nothing else: `nvidia-smi -L` lists three GPUs. Inside the
 guest `nvidia-smi conf-compute -q` reports `CC State: ON`, `CPU CC Capabilities: AMD SEV-SNP`.

@@ -106,7 +106,7 @@ def overlaps(hit: str, passages: list[str], window: int = 120) -> bool:
 # --- client -------------------------------------------------------------------
 def make_client(args) -> tuple[AttestRAGClient, float]:
     verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product),
-                                   Platform.NVIDIA_CC: NvidiaVerifier()})
+                                   Platform.NVIDIA_CC: nvidia_verifier(args)})
     if args.insecure_mock:
         from attestrag.attest.mock import insecure_baseline_verifier
         print("WARNING: --insecure-mock: accepting evidence from the public mock vendor; nothing is protected", file=sys.stderr)
@@ -217,12 +217,23 @@ def sweep(args, pool: list[dict], holdout: set[int], levels: list[int], n_per_le
     return out
 
 
+def nvidia_verifier(args) -> NvidiaVerifier:
+    if not getattr(args, "gpu_rim", False):
+        return NvidiaVerifier()
+    from attestrag.attest.nvidia_rim import OcspClient, RimClient
+    base = Path(args.nvidia_cache) if args.nvidia_cache else Path.home() / ".cache" / "attestrag" / "nvidia"
+    return NvidiaVerifier(rim=RimClient(base / "rim"), ocsp=OcspClient(cache_dir=base / "ocsp"))
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--node", required=True)
     ap.add_argument("--policy", required=True)
     ap.add_argument("--product", choices=["Milan", "Genoa", "Turin"])
     ap.add_argument("--kds-cache")
+    ap.add_argument("--gpu-rim", action="store_true",
+                    help="also check GPU evidence against NVIDIA's reference manifests (RIM service) and OCSP; cached in --nvidia-cache")
+    ap.add_argument("--nvidia-cache", help="cache dir for RIMs and OCSP responses (default ~/.cache/attestrag/nvidia)")
     ap.add_argument("--insecure-mock", action="store_true",
                     help="also trust the public insecure-baseline mock vendor (unprotected baseline only; proves nothing)")
     ap.add_argument("--dataset", default="zh_refine", choices=sorted(RGB_ROWS))

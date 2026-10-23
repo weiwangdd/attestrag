@@ -20,5 +20,7 @@
   ],
   "allowed_gpu_measurements": [
     "9b573c96a1ed738a259ce721c34bd83101b58865bbb6cd9101b2655bfaebdef9c6661d54eb8f715391f08a36a52ab56c"
-  ]
+  ],
+  "require_gpu_ocsp": true,
+  "require_gpu_rim": false
 }

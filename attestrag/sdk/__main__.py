@@ -19,6 +19,14 @@ from . import AttestRAGClient, NodeUntrusted
 from .http import HttpNodeTransport
 
 
+def nvidia_verifier(args) -> NvidiaVerifier:
+    if not getattr(args, "gpu_rim", False):
+        return NvidiaVerifier()
+    from ..attest.nvidia_rim import OcspClient, RimClient
+    base = Path(args.nvidia_cache) if args.nvidia_cache else Path.home() / ".cache" / "attestrag" / "nvidia"
+    return NvidiaVerifier(rim=RimClient(base / "rim"), ocsp=OcspClient(cache_dir=base / "ocsp"))
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="python -m attestrag.sdk")
     ap.add_argument("--node", required=True, help="node base URL")
@@ -26,6 +34,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--product", choices=["Milan", "Genoa", "Turin"])
     ap.add_argument("--kds-cache")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    ap.add_argument("--gpu-rim", action="store_true",
+                    help="also check GPU evidence against NVIDIA's reference manifests (RIM service) and OCSP; cached in --nvidia-cache")
+    ap.add_argument("--nvidia-cache", help="cache dir for RIMs and OCSP responses (default ~/.cache/attestrag/nvidia)")
     ap.add_argument("--insecure-mock", action="store_true",
                     help="also trust the public insecure-baseline mock vendor (unprotected baseline only; proves nothing)")
     sub.add_parser("verify", help="only verify the node's evidence and print claims")
@@ -34,7 +45,7 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
 
     verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product),
-                                   Platform.NVIDIA_CC: NvidiaVerifier()})
+                                   Platform.NVIDIA_CC: nvidia_verifier(args)})
     if args.insecure_mock:
         from .attest.mock import insecure_baseline_verifier
         print("WARNING: --insecure-mock: accepting evidence from the public mock vendor; nothing is protected", file=sys.stderr)

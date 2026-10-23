@@ -104,7 +104,7 @@ KBS_PORT=${KBS_PORT:-8800}; NODE_PORT=${NODE_PORT:-8081}
 if "$HOSTPY" -c 'import attestrag' 2>/dev/null; then
   started_kbs=0
   if ! curl -fs "http://127.0.0.1:$KBS_PORT/healthz" >/dev/null 2>&1; then
-    nohup "$HOSTPY" -m attestrag.kbs_server --policy "$TMP/good.json" --keys "$SNP/kbs-keys.json" \
+    nohup "$HOSTPY" -m attestrag.kbs_server --policy "$TMP/good.json" --keys "$SNP/kbs-keys.json" --gpu-rim \
       --listen "127.0.0.1:$KBS_PORT" > "$TMP/kbs.log" 2>&1 &
     KBS_PID=$!; started_kbs=1
     for _ in $(seq 1 20); do curl -fs "http://127.0.0.1:$KBS_PORT/healthz" >/dev/null 2>&1 && break; sleep 0.5; done
@@ -132,7 +132,7 @@ if "$HOSTPY" -c 'import attestrag' 2>/dev/null; then
   check "node in guest got its key from the KBS and serves host :$NODE_PORT" \
     curl -fs "http://127.0.0.1:$NODE_PORT/healthz" -o /dev/null
   "$G" 'cat /tmp/e2e-node.log' 2>/dev/null | sed 's/^/      node: /' | head -3
-  CLI=("$HOSTPY" -m attestrag.sdk --node "http://127.0.0.1:$NODE_PORT")
+  CLI=("$HOSTPY" -m attestrag.sdk --node "http://127.0.0.1:$NODE_PORT" --gpu-rim)   # the policy requires OCSP
   check "client: evidence verified against expected policy" \
     bash -c '"$@" verify >/dev/null 2>"$0"' "$TMP/cli.err" "${CLI[@]}" --policy "$TMP/good.json"
   printf 'The VCEK signs SEV-SNP attestation reports.\n\nRisotto needs patience.\n' > "$TMP/doc.txt"

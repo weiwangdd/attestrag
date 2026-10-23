@@ -38,6 +38,14 @@ def load_keys(path: Path, create: tuple[str, ...]) -> dict[str, bytes]:
     return keys
 
 
+def nvidia_verifier(args) -> NvidiaVerifier:
+    if not getattr(args, "gpu_rim", False):
+        return NvidiaVerifier()
+    from .attest.nvidia_rim import OcspClient, RimClient
+    base = Path(args.nvidia_cache) if args.nvidia_cache else Path.home() / ".cache" / "attestrag" / "nvidia"
+    return NvidiaVerifier(rim=RimClient(base / "rim"), ocsp=OcspClient(cache_dir=base / "ocsp"))
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="python -m attestrag.kbs_server")
     ap.add_argument("--listen", default="127.0.0.1:8800", help="host:port (default 127.0.0.1:8800)")
@@ -47,6 +55,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--product", choices=["Milan", "Genoa", "Turin"])
     ap.add_argument("--kds-cache", help="VCEK cache dir (default ~/.cache/attestrag/kds)")
     ap.add_argument("--nonce-ttl", type=float, default=60.0)
+    ap.add_argument("--gpu-rim", action="store_true",
+                    help="also check GPU evidence against NVIDIA's reference manifests (RIM service) and OCSP; cached in --nvidia-cache")
+    ap.add_argument("--nvidia-cache", help="cache dir for RIMs and OCSP responses (default ~/.cache/attestrag/nvidia)")
     ap.add_argument("--insecure-mock", action="store_true",
                     help="also trust the public insecure-baseline mock vendor (unprotected baseline only; proves nothing)")
     args = ap.parse_args(argv)
@@ -54,7 +65,7 @@ def main(argv: list[str] | None = None) -> None:
     policy = Policy.from_json(Path(args.policy).read_text())
     keys = load_keys(Path(args.keys), tuple(args.key_id or ["index-dek"]))
     verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product),
-                                   Platform.NVIDIA_CC: NvidiaVerifier()})
+                                   Platform.NVIDIA_CC: nvidia_verifier(args)})
     if args.insecure_mock:
         from .attest.mock import insecure_baseline_verifier
         print("WARNING: --insecure-mock: accepting evidence from the public mock vendor; nothing is protected", file=sys.stderr)

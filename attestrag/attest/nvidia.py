@@ -18,8 +18,8 @@ its own nonce, chosen by the GPU (SPDM 1.1 section 10.11): freshness comes from 
 requester nonce, which the signature covers as part of the request half of the
 transcript, not from the response nonce.
 
-Not done here: golden-measurement (RIM) lookup and OCSP revocation, which nvtrust's
-local verifier adds on top of the same checks; see docs/threat-model.md.
+Optional, through nvidia_rim: NVIDIA's reference manifests (the published golden values
+for the driver and VBIOS measurement blocks) and OCSP revocation of the certificate chains.
 """
 
 from __future__ import annotations
@@ -38,6 +38,8 @@ from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from cryptography.hazmat.primitives.serialization import Encoding
 
 from .base import AttestationError, Attester, Verifier
+from .nvidia_rim import (NVDEC_DISABLED, OcspClient, ReferenceManifest, RimClient, driver_rim_id, match_measurements,
+                         merge_golden, vbios_rim_id, verify_chain)
 from .types import Claims, Evidence, Platform
 
 NONCE_LEN = 32
@@ -52,7 +54,12 @@ OPAQUE_FIELDS = {1: "cert_issuer_name", 2: "cert_authority_key_id", 3: "driver_v
                  15: "chip_sku", 16: "chip_sku_mod", 17: "project", 18: "project_sku", 19: "project_sku_mod",
                  20: "fwid", 21: "protected_pcie_status", 22: "switch_pdi", 23: "floorswept_ports",
                  24: "position_id", 25: "lock_switch_status", 32: "gpu_link_conn", 33: "sys_enable_status"}
-ROOTS_DIR = Path(__file__).parent / "nvidia_roots"
+ROOTS_DIR = Path(__file__).parent / "nvidia_roots"   # device_*.pem: device identity roots; corim_*.pem: RIM signing roots
+
+
+def load_roots(pattern: str) -> dict[bytes, x509.Certificate]:
+    certs = [c for f in sorted(ROOTS_DIR.glob(pattern)) for c in x509.load_pem_x509_certificates(f.read_bytes())]
+    return {c.public_bytes(Encoding.DER): c for c in certs}
 
 
 @dataclass(frozen=True)
@@ -161,27 +168,51 @@ def cert_fwid(cert: x509.Certificate) -> bytes | None:
 class NvidiaVerifier(Verifier):
     """Verifies an NVIDIA GPU attestation transcript against pinned NVIDIA roots."""
 
-    def __init__(self, roots: list[x509.Certificate] | None = None, clock=time.time):
+    def __init__(self, roots: list[x509.Certificate] | None = None, clock=time.time,
+                 rim: RimClient | None = None, ocsp: OcspClient | None = None,
+                 rim_roots: list[x509.Certificate] | None = None):
         self.clock = clock
-        if roots is None:
-            roots = [c for f in sorted(ROOTS_DIR.glob("*.pem")) for c in x509.load_pem_x509_certificates(f.read_bytes())]
-        self.roots = {r.public_bytes(Encoding.DER): r for r in roots}
+        self.roots = {r.public_bytes(Encoding.DER): r for r in roots} if roots is not None else load_roots("device_*.pem")
+        self.rim_roots = {r.public_bytes(Encoding.DER): r for r in rim_roots} if rim_roots is not None else load_roots("corim_*.pem")
+        self.rim, self.ocsp = rim, ocsp
+        self._rim_cache: dict[str, ReferenceManifest | None] = {}
 
     def _verify_chain(self, chain: list[x509.Certificate], now: float) -> x509.Certificate:
-        for i, cert in enumerate(chain):
-            nb, na = cert.not_valid_before_utc.timestamp(), cert.not_valid_after_utc.timestamp()
-            if not (nb <= now <= na):
-                raise AttestationError(f"GPU certificate {i} ({cert.subject.rfc4514_string()}) not valid now")
-            issuer = chain[i + 1] if i + 1 < len(chain) else None
-            if issuer is None:
-                if cert.public_bytes(Encoding.DER) not in self.roots:
-                    raise AttestationError("GPU certificate chain does not end in a pinned NVIDIA root")
-                issuer = cert
-            try:
-                issuer.public_key().verify(cert.signature, cert.tbs_certificate_bytes, ec.ECDSA(cert.signature_hash_algorithm))
-            except Exception as e:  # noqa: BLE001
-                raise AttestationError(f"GPU certificate {i} signature invalid: {e}") from e
-        return chain[0]
+        try:
+            return verify_chain(chain, self.roots, now)
+        except AttestationError as e:
+            raise AttestationError(f"GPU {e}") from e
+
+    def _manifest(self, rim_id: str, now: float) -> ReferenceManifest | None:
+        """Fetched, chain-checked (plus OCSP if enabled) and signature-checked; None if NVIDIA has none."""
+        if rim_id not in self._rim_cache:
+            xml = self.rim.fetch(rim_id)
+            rm = None
+            if xml is not None:
+                rm = ReferenceManifest.parse(xml)
+                try:
+                    rm.verify(self.rim_roots, now, self.ocsp)
+                except AttestationError as e:
+                    raise AttestationError(f"RIM {rim_id}: {e}") from e
+            self._rim_cache[rim_id] = rm
+        return self._rim_cache[rim_id]
+
+    def _check_rims(self, rep: GpuReport, now: float) -> dict[str, str]:
+        driver_id = driver_rim_id(rep.opaque_str("driver_version"))
+        vbios_id = vbios_rim_id(rep.opaque_str("project"), rep.opaque_str("project_sku"), rep.opaque_str("chip_sku"), rep.vbios_version)
+        out, manifests = {}, {}
+        for key, rim_id, version in (("rim_driver", driver_id, rep.opaque_str("driver_version").lower()),
+                                      ("rim_vbios", vbios_id, rep.vbios_version)):
+            rm = self._manifest(rim_id, now)
+            if rm is not None and rm.version != version:
+                raise AttestationError(f"RIM {rim_id} is for version {rm.version}, report says {version}")
+            manifests[key] = rm
+            out[key] = ("ok:" if rm is not None else "not-found:") + rim_id
+        nvdec = rep.opaque.get("nvdec0_status", b"")
+        matched = match_measurements([v for _, v in rep.measurements], merge_golden(manifests["rim_driver"], manifests["rim_vbios"]),
+                                     nvdec_disabled=bool(nvdec) and nvdec[0] == NVDEC_DISABLED)
+        out["rim_matched"] = ",".join(str(i) for i in matched)
+        return out
 
     def verify(self, evidence: Evidence, expected_report_data: bytes) -> Claims:
         if evidence.platform != Platform.NVIDIA_CC:
@@ -208,6 +239,9 @@ class NvidiaVerifier(Verifier):
                 raise AttestationError("firmware ID in the AK certificate does not match the report")
         extra = {
             "driver_version": rep.opaque_str("driver_version"),
+            "project": rep.opaque_str("project"),
+            "project_sku": rep.opaque_str("project_sku"),
+            "chip_sku": rep.opaque_str("chip_sku"),
             "vbios_version": rep.vbios_version,
             "fwid": (fwid or b"").hex(),
             "measurement_count": str(len(rep.measurements)),
@@ -215,6 +249,12 @@ class NvidiaVerifier(Verifier):
         }
         for idx, val in rep.measurements:
             extra[f"msr_{idx}"] = val.hex()
+        chain = load_pem_chain(evidence.cert_chain[0])
+        if self.ocsp is not None:
+            self.ocsp.check_chain(chain, now, skip_leaf=True)   # the AK leaf is minted by the GPU, not by a CA
+            extra["ocsp"] = "good"
+        if self.rim is not None:
+            extra.update(self._check_rims(rep, now))
         return Claims(
             platform=Platform.NVIDIA_CC,
             measurement=rep.composite_measurement.hex(),

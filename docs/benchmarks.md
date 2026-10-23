@@ -212,6 +212,25 @@ a normal-mode GPU to the SEV-SNP VM: the NVIDIA driver refuses
 attach gpu`), so inside a CVM the GPU must be in CC mode. The two halves (CVM, CC GPU) are
 only separable with a plain VM plus a CC-mode GPU, which NVIDIA does not support either.
 
+### Session cost with NVIDIA's services (RIM + OCSP, 2026-10-24)
+
+With `--gpu-rim` the client (or KBS) also fetches the driver and VBIOS reference manifests,
+verifies their XML signatures and chains, compares the 22 active driver entries with the
+report, and asks NVIDIA's OCSP responder about the 3 CA certificates of the attestation-key
+chain and the 3 of the manifest chain. Measured on h200 with the SDK's `verify` against the
+live node:
+
+| session | wall time |
+|---|---|
+| SNP + GPU transcript, no NVIDIA services | 0.21 s |
+| + manifests and OCSP, cold cache (1 manifest fetch, 6 OCSP round trips) | 3.27 s |
+| + manifests and OCSP, warm cache | 0.23 s |
+
+Manifests are immutable per id and OCSP responses are valid for a day, so the cold path is
+paid once per verifier, not per session. A client that skips the services against a policy
+with `require_gpu_ocsp` is refused before it uploads anything (`gpu[0]: certificate
+revocation not checked`).
+
 ## Reproduce
 
 ```bash

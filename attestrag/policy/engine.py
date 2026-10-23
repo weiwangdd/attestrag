@@ -25,6 +25,9 @@ class Policy:
     allowed_gpu_platforms: frozenset[Platform] = frozenset()
     allowed_gpu_measurements: frozenset[str] = frozenset()  # empty = any
     min_gpu_tcb: dict[str, int] = field(default_factory=dict)
+    # NVIDIA services: the verifier records "rim_driver"/"rim_vbios" = ok:<id> | not-found:<id> and "ocsp" = good
+    require_gpu_rim: bool = False    # both manifests published, verified and matching
+    require_gpu_ocsp: bool = False   # certificate chain checked against NVIDIA's OCSP responder
     # SEV-SNP guest policy (report GUEST_POLICY) allow-list, e.g. {0x30000}; empty = not checked.
     # Covers bits the debug flag alone does not: MIGRATE_MA, SMT, SINGLE_SOCKET, ABI version.
     allowed_guest_policy: frozenset[int] = frozenset()
@@ -42,6 +45,8 @@ class Policy:
             allowed_gpu_platforms=frozenset(Platform(p) for p in d.get("allowed_gpu_platforms", [])),
             allowed_gpu_measurements=frozenset(m.lower() for m in d.get("allowed_gpu_measurements", [])),
             min_gpu_tcb={k: int(v) for k, v in d.get("min_gpu_tcb", {}).items()},
+            require_gpu_rim=bool(d.get("require_gpu_rim", False)),
+            require_gpu_ocsp=bool(d.get("require_gpu_ocsp", False)),
             allowed_guest_policy=frozenset(_to_int(p) for p in d.get("allowed_guest_policy", [])),
         )
 
@@ -113,6 +118,11 @@ def evaluate(policy: Policy, claims: CompositeClaims, now: float) -> Decision:
         if policy.allowed_gpu_measurements and g.measurement.lower() not in policy.allowed_gpu_measurements:
             reasons.append(f"{p}: measurement not in allow-list")
         reasons += check_min_tcb(g.tcb, policy.min_gpu_tcb, p)
+        if policy.require_gpu_rim and not all(str(g.extra.get(k, "")).startswith("ok:") for k in ("rim_driver", "rim_vbios")):
+            reasons.append(f"{p}: reference manifests not verified "
+                           f"(driver {g.extra.get('rim_driver', 'unchecked')}, vbios {g.extra.get('rim_vbios', 'unchecked')})")
+        if policy.require_gpu_ocsp and g.extra.get("ocsp") != "good":
+            reasons.append(f"{p}: certificate revocation not checked")
         reasons += _freshness(g, policy, now, p)
 
     return Decision(allow=not reasons, reasons=tuple(reasons))

@@ -13,6 +13,7 @@ import pytest
 
 from attestrag.attest import AttestationError, CompositeClaims, CompositeEvidence, CompositeVerifier, Evidence, Platform, gpu_report_data
 from attestrag.attest.nvidia import NvidiaVerifier
+from attestrag.attest.nvidia_rim import OcspClient, RimClient
 from attestrag.attest.snp import SnpVerifier
 from attestrag.policy import Policy, evaluate
 from tests.test_snp import H200Kds, POLICY_FILE
@@ -27,7 +28,10 @@ def pair():
     snp_ev = Evidence(Platform.SEV_SNP, (FIX / "snp-report.bin").read_bytes(), b"")
     gpu_ev = Evidence(Platform.NVIDIA_CC, (FIX / "gpu-report.bin").read_bytes(), b"", ((FIX / "ak-chain.pem").read_bytes(),))
     clock = lambda: meta["verify_at"]  # noqa: E731
-    cv = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(H200Kds(), clock=clock), Platform.NVIDIA_CC: NvidiaVerifier(clock=clock)})
+    # NVIDIA's services replayed from the fixtures: the driver manifest and the six real OCSP responses
+    nv = NvidiaVerifier(clock=clock, rim=RimClient(cache_dir=OTHER_GPU / "rim", offline=True),
+                        ocsp=OcspClient(cache_dir=OTHER_GPU / "ocsp", offline=True))
+    cv = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(H200Kds(), clock=clock), Platform.NVIDIA_CC: nv})
     return meta, snp_ev, gpu_ev, cv
 
 
@@ -37,8 +41,9 @@ def test_bound_pair_verifies_and_policy_allows(pair):
     cc = cv.verify(CompositeEvidence(snp_ev, (gpu_ev,)), rd)
     assert cc.cpu.measurement == meta["snp_measurement"] and len(cc.gpus) == 1
     assert cc.gpus[0].report_data == bytes.fromhex(meta["gpu_report_data"]) == gpu_report_data(rd)
+    assert cc.gpus[0].extra["ocsp"] == "good" and cc.gpus[0].extra["rim_driver"].startswith("ok:")
     pol = Policy.from_json(POLICY_FILE.read_text())
-    assert pol.require_gpu and cc.gpus[0].measurement in pol.allowed_gpu_measurements
+    assert pol.require_gpu and pol.require_gpu_ocsp and cc.gpus[0].measurement in pol.allowed_gpu_measurements
     d = evaluate(pol, cc, meta["verify_at"])
     assert d.allow, d.reasons
     # the same policy denies the CPU half on its own, and a GPU with other firmware measurements
