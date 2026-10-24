@@ -1,4 +1,10 @@
-# Formal analysis of the key-release protocol
+# Formal analysis
+
+Two parts: the release *protocol* in Tamarin (this file) and the *policy function* as an
+executable Lean 4 specification with a differential test against the Python engine
+(`lean/README.md`).
+
+## Protocol model (Tamarin)
 
 Tamarin models of the protocol that `attestrag/kbs_client/reference_kbs.py`, `attestrag/attest/binding.py`,
 `attestrag/common/crypto.py`, `attestrag/node.py` and `attestrag/sdk` implement. Run with

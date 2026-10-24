@@ -1,0 +1,9 @@
+name = "attestrag_policy"
+defaultTargets = ["attestrag_policy"]
+
+[[lean_lib]]
+name = "AttestRAG"
+
+[[lean_exe]]
+name = "attestrag_policy"
+root = "Main"
