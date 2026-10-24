@@ -1,0 +1,205 @@
+/*
+ * VARIANT of attestrag_release.spthy: the CPU report_data also commits to the attached GPU's
+ * attestation public key, rd = h('rd', nonce, pk, pkg). This is the one-line change that closes
+ * the residual gap the base model exposes (gpu_is_the_attached_one): a GPU half substituted in
+ * transit no longer matches the CPU report. Not yet implemented in the code (it changes the
+ * report_data layout, hence the golden fixtures).
+ *
+ * AttestRAG key-release protocol, symbolic model (Tamarin).
+ *
+ * Parties
+ *   Platform : AMD PSP (CPU reports) and NVIDIA (GPU reports), one signing key each. Trusted.
+ *   TEE      : a confidential VM. The 'good' image generates its X25519 transport key inside and
+ *              keeps it; any other image is the adversary's (its key leaks, it signs what it likes).
+ *   GPU      : every confidential GPU has its own attestation key, certified by NVIDIA's root. It
+ *              signs <'gpureport', firmware, nonce> for whatever nonce its driver passes. The good
+ *              TEE's attached GPU only ever signs h('gpu', rd) for that TEE's own rd. The adversary
+ *              may own certified GPUs too (GPU_Adversary): they sign any nonce it asks for.
+ *   KBS      : single-use nonces; releases the DEK wrapped (ECDH + KDF + AEAD) to the pk in the
+ *              report, only for the 'good' measurement with a GPU report over h('gpu', rd).
+ *   Client   : same checks as the KBS, then uploads a document wrapped to pk and asks a question
+ *              with a one-time reply key.
+ *
+ * Code it mirrors: attestrag/kbs_client/reference_kbs.py (challenge/request_key),
+ *   attestrag/attest/binding.py (rd = H(label, nonce, pk); gpu_rd = H(label, rd)),
+ *   attestrag/common/crypto.py (wrap_to/unwrap), attestrag/node.py + attestrag/sdk (sessions).
+ * Abstractions: hashes as h(), the X25519+HKDF+AES-GCM wrap as aenc(., pk(x)) (only the holder of x
+ *   opens it), answers sealed with senc, nonce TTL dropped
+ *   (single use is what matters), one DEK, measurements as constants 'good' / other.
+ *
+ *   tamarin-prover --prove formal/attestrag_release.spthy
+ */
+theory AttestRAG_KeyRelease_GpuIdentity
+begin
+
+builtins: signing, hashing, asymmetric-encryption, symmetric-encryption
+
+restriction Equality: "All x y #i. Eq(x, y)@i ==> x = y"
+restriction OtherImageIsNotGood: "All m #i. OtherImage(m)@i ==> not (m = 'good')"
+restriction OtherFirmwareIsNotGood: "All f #i. OtherFirmware(f)@i ==> not (f = 'goodgpu')"
+restriction SingleSetup: "All #i #j. Setup()@i & Setup()@j ==> #i = #j"
+
+// ---- platform roots ---------------------------------------------------------------------
+rule Platform_Setup:
+  [ Fr(~skP), Fr(~skNV) ]
+  --[ Setup() ]->
+  [ !PlatformKey(~skP), !NvidiaKey(~skNV), !PlatformPub(pk(~skP)), !NvidiaPub(pk(~skNV)),
+    Out(pk(~skP)), Out(pk(~skNV)) ]
+
+// ---- confidential VMs -------------------------------------------------------------------
+// The measured image: transport key generated inside, never leaves. One confidential GPU
+// (its own certified attestation key ~skg) is attached to the VM.
+rule TEE_Start_Good:
+  [ Fr(~x), Fr(~skg), !NvidiaKey(~skNV) ]
+  --[ TEEStart('good', pk(~x)), GpuAttached(pk(~skg), pk(~x)) ]->
+  [ !TEE('good', ~x, ~skg), !GpuCert(pk(~skg), sign(<'gpucert', pk(~skg)>, ~skNV)),
+    Out(<pk(~x), pk(~skg), sign(<'gpucert', pk(~skg)>, ~skNV)>) ]
+
+// Any other image runs under the adversary's control: it learns the key it generated.
+rule TEE_Start_Other:
+  [ Fr(~x), Fr(~skg), !NvidiaKey(~skNV) ]
+  --[ TEEStart($m, pk(~x)), OtherImage($m) ]->
+  [ !TEE($m, ~x, ~skg), !GpuCert(pk(~skg), sign(<'gpucert', pk(~skg)>, ~skNV)),
+    Out(<pk(~x), ~x, pk(~skg), sign(<'gpucert', pk(~skg)>, ~skNV)>) ]
+
+// attestation(nonce): the platform signs the TEE's measurement over rd = h('rd', nonce, pk);
+// the attached confidential GPU signs h('gpu', rd). Both halves go out together.
+rule TEE_Attest:
+  let pkx  = pk(~x)
+      pkg  = pk(~skg)
+      rd   = h(<'rd', n, pkx, pkg>)
+      grd  = h(<'gpu', rd>)
+      rep  = sign(<'report', m, rd>, ~skP)
+      grep = sign(<'gpureport', 'goodgpu', grd>, ~skg)
+  in
+  [ !TEE(m, ~x, ~skg), !GpuCert(pkg, gcert), !PlatformKey(~skP), In(n) ]
+  --[ TEEAttest(m, n, pkx), GpuSigned(pkg, grd) ]->
+  [ Out(<n, pkx, rep, pkg, gcert, grep>) ]
+
+// An adversary image can put anything into report_data.
+rule TEE_Other_FreeReport:
+  [ !TEE(m, ~x, ~skg), !PlatformKey(~skP), In(rd) ]
+  --[ OtherImage(m) ]->
+  [ Out(sign(<'report', m, rd>, ~skP)) ]
+
+// ---- GPUs the adversary controls -----------------------------------------------------
+// An operator with confidential GPUs of its own (certified like any other) can have them sign
+// any value, including another session's h('gpu', rd); and GPUs with other firmware exist.
+rule GPU_Adversary:
+  [ Fr(~skg), !NvidiaKey(~skNV) ]
+  --[ AdvGpuMade(pk(~skg)) ]->
+  [ !AdvGpu(~skg), Out(<pk(~skg), sign(<'gpucert', pk(~skg)>, ~skNV)>) ]
+
+rule GPU_Adversary_Sign:
+  [ !AdvGpu(~skg), In(grd) ]
+  --[ GpuSigned(pk(~skg), grd) ]->
+  [ Out(sign(<'gpureport', 'goodgpu', grd>, ~skg)) ]
+
+rule GPU_Adversary_OtherFirmware:
+  [ !AdvGpu(~skg), In(grd) ]
+  --[ OtherFirmware($f) ]->
+  [ Out(sign(<'gpureport', $f, grd>, ~skg)) ]
+
+// ---- key broker -------------------------------------------------------------------------
+rule KBS_Setup:
+  [ Fr(~dek) ] --[ KBSSetup(~dek) ]-> [ !KBSKey(~dek) ]
+
+rule KBS_Challenge:
+  [ Fr(~n) ] --[ Challenge(~n) ]-> [ Out(~n), KBSNonce(~n) ]
+
+// request_key: nonce consumed (single use), both signatures over this session's rd, policy
+// 'good' / 'goodgpu', then DEK wrapped to the pk the report vouches for.
+rule KBS_Release:
+  let rd  = h(<'rd', n, pkx, pkg>)
+      grd = h(<'gpu', rd>)
+  in
+  [ KBSNonce(n), !KBSKey(~dek), !PlatformPub(pkP), !NvidiaPub(pkNV),
+    In(<n, pkx, rep, pkg, gcert, grep>) ]
+  --[ Eq(verify(rep, <'report', 'good', rd>, pkP), true),
+      Eq(verify(gcert, <'gpucert', pkg>, pkNV), true),
+      Eq(verify(grep, <'gpureport', 'goodgpu', grd>, pkg), true),
+      Release(n, pkx, ~dek), AcceptedGpu(n, pkx, pkg) ]->
+  [ Out(aenc(<'dek', ~dek>, pkx)) ]
+
+rule TEE_Unwrap:
+  let pkx = pk(~x)
+  in
+  [ !TEE(m, ~x, ~skg), In(aenc(<'dek', dek>, pkx)) ]
+  --[ NodeGotKey(m, pkx, dek) ]->
+  [ !NodeKey(m, pkx, dek) ]
+
+// ---- client sessions --------------------------------------------------------------------
+rule Client_Connect:
+  [ Fr(~cn) ] --[ ClientNonce(~cn) ]-> [ Out(~cn), ClientSess(~cn) ]
+
+// verify evidence under the same policy, then upload a document wrapped to pk
+rule Client_Upload:
+  let rd  = h(<'rd', cn, pkx, pkg>)
+      grd = h(<'gpu', rd>)
+  in
+  [ ClientSess(cn), !PlatformPub(pkP), !NvidiaPub(pkNV), Fr(~doc),
+    In(<cn, pkx, rep, pkg, gcert, grep>) ]
+  --[ Eq(verify(rep, <'report', 'good', rd>, pkP), true),
+      Eq(verify(gcert, <'gpucert', pkg>, pkNV), true),
+      Eq(verify(grep, <'gpureport', 'goodgpu', grd>, pkg), true),
+      Upload(pkx, ~doc) ]->
+  [ Out(aenc(<'ingest', ~doc>, pkx)), ClientDoc(pkx) ]
+
+// ask: question and a one-time reply key, wrapped to pk
+rule Client_Ask:
+  [ ClientDoc(pkx), Fr(~q), Fr(~rk) ]
+  --[ Ask(pkx, ~q, ~rk) ]->
+  [ Out(aenc(<'query', ~q, ~rk>, pkx)), ClientWait(pkx, ~q, ~rk) ]
+
+// the node answers with the reply key only it could unwrap (after it holds the DEK)
+rule TEE_Answer:
+  let pkx = pk(~x)
+  in
+  [ !TEE(m, ~x, ~skg), !NodeKey(m, pkx, dek), In(aenc(<'query', q, rk>, pkx)), Fr(~ans) ]
+  --[ Answer(m, pkx, q, ~ans) ]->
+  [ Out(senc(<q, ~ans>, rk)) ]
+
+rule Client_Accept:
+  [ ClientWait(pkx, q, rk), In(senc(<q, ans>, rk)) ]
+  --[ Accept(pkx, q, ans) ]->
+  [ ]
+
+// ---- properties -------------------------------------------------------------------------
+
+lemma executable: exists-trace
+  "Ex n pkx dek q ans #i #j #k.
+     Release(n, pkx, dek)@i & NodeGotKey('good', pkx, dek)@j & Accept(pkx, q, ans)@k & i < j & j < k"
+
+// P1  A released key is known only to the TEE whose private key the report vouches for.
+lemma dek_secrecy:
+  "All n pkx dek #i. Release(n, pkx, dek)@i ==> not (Ex #j. K(dek)@j)"
+
+// P1' ... and that TEE runs the measured image and attested in this very session.
+lemma release_only_to_good_prover:
+  "All n pkx dek #i. Release(n, pkx, dek)@i
+     ==> Ex #j. TEEAttest('good', n, pkx)@j & j < i"
+
+// P2  No replay: one release per nonce.
+lemma no_replay:
+  "All n pkx1 pkx2 dek1 dek2 #i #j.
+     Release(n, pkx1, dek1)@i & Release(n, pkx2, dek2)@j ==> #i = #j"
+
+// P3  The GPU report accepted with a session was produced over this session's rd, after the
+//     nonce was issued: evidence from another session or machine fails the binding.
+lemma gpu_bound_to_session:
+  "All n pkx pkg #i. AcceptedGpu(n, pkx, pkg)@i
+     ==> Ex #j #k. Challenge(n)@k & GpuSigned(pkg, h(<'gpu', h(<'rd', n, pkx, pkg>)>))@j & k < j & j < i"
+
+// P3' With the GPU identity inside rd this now holds: the accepted GPU is the attached one.
+lemma gpu_is_the_attached_one:
+  "All n pkx pkg #i. AcceptedGpu(n, pkx, pkg)@i ==> Ex #j. GpuAttached(pkg, pkx)@j"
+
+// P4  Documents a client uploads after verification are known only to the good TEE.
+lemma doc_secrecy:
+  "All pkx doc #i. Upload(pkx, doc)@i ==> not (Ex #j. K(doc)@j)"
+
+// P5  An answer the client accepts was produced by the good TEE that holds the key.
+lemma answer_authentic:
+  "All pkx q ans #i. Accept(pkx, q, ans)@i ==> Ex #j. Answer('good', pkx, q, ans)@j & j < i"
+
+end
