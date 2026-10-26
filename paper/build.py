@@ -96,26 +96,27 @@ def convert_tables(text: str) -> str:
 
 TIKZ = r"""\begin{figure*}[t]\centering
 \begin{tikzpicture}[font=\small, node distance=4mm,
-  stage/.style={draw, rounded corners=2pt, minimum width=3.6cm, minimum height=6mm, align=center, fill=white},
+  stage/.style={draw, rounded corners=2pt, minimum width=3.9cm, minimum height=6mm, align=center, fill=white},
+  gpu/.style={draw, rounded corners=2pt, minimum width=3.9cm, minimum height=6mm, align=center, fill=green!6},
   vm/.style={draw, dashed, rounded corners=4pt, inner sep=3mm},
   arr/.style={-{Stealth[length=2mm]}, thick}, lbl/.style={font=\scriptsize, fill=white, inner sep=1pt}]
   \node[stage] (ingest) {ingest and parse};
-  \node[stage, below=of ingest] (embed) {embedding};
+  \node[stage, below=of ingest] (embed) {embedding (llama.cpp, CUDA)};
   \node[stage, below=of embed] (index) {vector index (Qdrant on tmpfs)};
   \node[stage, below=of index] (retrieve) {retrieve and filter};
-  \node[stage, below=of retrieve] (gen) {generate (llama.cpp, CPU) \textbf{[done]}};
-  \node[vm, fit=(ingest)(gen), label={[font=\small\bfseries]above:CPU confidential VM (SEV-SNP / TDX)}] (cpuvm) {};
-  \node[stage, right=22mm of retrieve] (gpugen) {generation (vLLM)};
-  \node[vm, fit=(gpugen), inner sep=4mm, label={[font=\small\bfseries]above:GPU confidential VM \textbf{[design]}}] (gpuvm) {};
-  \node[stage, left=18mm of index, text width=3.2cm, minimum height=22mm, align=left]
+  \node[stage, below=of retrieve] (gen) {generate (llama.cpp, CUDA)};
+  \node[gpu, right=10mm of index, text width=3.6cm, minimum height=22mm]
+    (gpunode) {\textbf{H200 in CC mode}\\[1pt] \scriptsize passed through to this VM; SPDM-protected PCIe, bounce buffers; attestation transcript via NVML};
+  \node[vm, fit=(ingest)(gen)(gpunode), label={[font=\small\bfseries]above:confidential VM (SEV-SNP; TDX \textbf{[design]})}] (cvm) {};
+  \node[stage, left=14mm of index, text width=3.2cm, minimum height=22mm, align=left]
     (client) {\textbf{client SDK}\\[1pt] 1. verify composite evidence against the policy\\ 2. upload, encrypted to the node key\\ 3. open the sealed answer};
-  \node[stage, fill=blue!5, minimum width=9cm, minimum height=9mm, below=12mm of gen, align=center]
-    (kbs) {\textbf{KBS + policy engine} (customer's trust domain)\\ \scriptsize releases the index key only if CPU and GPU evidence are bound and the measurement, TCB and guest policy pass};
+  \node[stage, fill=blue!5, minimum width=9.5cm, minimum height=9mm, below=12mm of gen, align=center]
+    (kbs) {\textbf{KBS + policy engine} (customer's trust domain)\\ \scriptsize releases the index key only if the SNP report and the GPU transcript are bound to this session and the measurements, TCB and guest policy pass};
+  \draw[arr, <->] (embed.east) -- (gpunode.west |- embed.east) node[lbl, midway, above] {CUDA};
+  \draw[arr, <->] (gen.east) -- (gpunode.west |- gen.east) node[lbl, midway, above] {CUDA};
   \draw[arr] (client.north) |- (ingest.west) node[lbl, pos=0.8] {upload (encrypted)};
   \draw[arr] (retrieve.west) -- (client.east |- retrieve.west) node[lbl, midway, above] {sealed answer};
-  \draw[arr] (retrieve.east) -- (gpugen.west) node[lbl, midway, above] {retrieved chunks};
-  \draw[arr, <->] (cpuvm.south) -- (kbs.north -| cpuvm.south) node[lbl, midway] {prove, get key};
-  \draw[arr, <->] (gpuvm.south) |- ([yshift=2mm]kbs.east) node[lbl, pos=0.25, anchor=west, xshift=1mm] {prove};
+  \draw[arr, <->] (cvm.south) -- (kbs.north -| cvm.south) node[lbl, midway] {prove (SNP report + GPU transcript), get key};
   \draw[arr, <->] (client.south) |- ([yshift=2mm]kbs.west) node[lbl, pos=0.25, anchor=east, xshift=-1mm] {verify};
 \end{tikzpicture}
 \caption{%s}\label{fig:arch}
@@ -135,13 +136,13 @@ def convert_figure(text: str) -> str:
 FORMULA = r"""```{=latex}
 \begin{footnotesize}
 \begin{align*}
-\mathit{rd}_{\mathrm{cpu}} &= \mathrm{SHA\text{-}384}(\ell_{\mathrm{cpu}} \parallel \mathit{nonce} \parallel \mathit{pk}_{\mathrm{tee}})\\
+\mathit{rd}_{\mathrm{cpu}} &= \mathrm{SHA\text{-}384}(\ell_{\mathrm{cpu}} \parallel \mathit{nonce} \parallel \mathit{pk}_{\mathrm{tee}} \parallel \mathit{id}_{\mathrm{gpu},1} \parallel \cdots \parallel \mathit{id}_{\mathrm{gpu},n})\\
 \mathit{rd}_{\mathrm{gpu}} &= \mathrm{SHA\text{-}384}(\ell_{\mathrm{gpu}} \parallel \mathit{rd}_{\mathrm{cpu}})
 \end{align*}
 \end{footnotesize}
 ```
 
-with the labels $\ell_{\mathrm{cpu}}$ = `attestrag-rd-v1`, $\ell_{\mathrm{gpu}}$ = `attestrag-gpu-bind-v1` and """
+with the labels $\ell_{\mathrm{cpu}}$ = `attestrag-rd-v2`, $\ell_{\mathrm{gpu}}$ = `attestrag-gpu-bind-v1` and """
 
 
 def convert_formula(text: str) -> str:

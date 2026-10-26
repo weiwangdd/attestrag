@@ -97,26 +97,27 @@ We implemented AttestRAG (Section 7) and deployed it on a self-hosted SEV-SNP ma
 
 \begin{figure*}[t]\centering
 \begin{tikzpicture}[font=\small, node distance=4mm,
-  stage/.style={draw, rounded corners=2pt, minimum width=3.6cm, minimum height=6mm, align=center, fill=white},
+  stage/.style={draw, rounded corners=2pt, minimum width=3.9cm, minimum height=6mm, align=center, fill=white},
+  gpu/.style={draw, rounded corners=2pt, minimum width=3.9cm, minimum height=6mm, align=center, fill=green!6},
   vm/.style={draw, dashed, rounded corners=4pt, inner sep=3mm},
   arr/.style={-{Stealth[length=2mm]}, thick}, lbl/.style={font=\scriptsize, fill=white, inner sep=1pt}]
   \node[stage] (ingest) {ingest and parse};
-  \node[stage, below=of ingest] (embed) {embedding};
+  \node[stage, below=of ingest] (embed) {embedding (llama.cpp, CUDA)};
   \node[stage, below=of embed] (index) {vector index (Qdrant on tmpfs)};
   \node[stage, below=of index] (retrieve) {retrieve and filter};
-  \node[stage, below=of retrieve] (gen) {generate (llama.cpp, CPU) \textbf{[done]}};
-  \node[vm, fit=(ingest)(gen), label={[font=\small\bfseries]above:CPU confidential VM (SEV-SNP / TDX)}] (cpuvm) {};
-  \node[stage, right=22mm of retrieve] (gpugen) {generation (vLLM)};
-  \node[vm, fit=(gpugen), inner sep=4mm, label={[font=\small\bfseries]above:GPU confidential VM \textbf{[design]}}] (gpuvm) {};
-  \node[stage, left=18mm of index, text width=3.2cm, minimum height=22mm, align=left]
+  \node[stage, below=of retrieve] (gen) {generate (llama.cpp, CUDA)};
+  \node[gpu, right=10mm of index, text width=3.6cm, minimum height=22mm]
+    (gpunode) {\textbf{H200 in CC mode}\\[1pt] \scriptsize passed through to this VM; SPDM-protected PCIe, bounce buffers; attestation transcript via NVML};
+  \node[vm, fit=(ingest)(gen)(gpunode), label={[font=\small\bfseries]above:confidential VM (SEV-SNP; TDX \textbf{[design]})}] (cvm) {};
+  \node[stage, left=14mm of index, text width=3.2cm, minimum height=22mm, align=left]
     (client) {\textbf{client SDK}\\[1pt] 1. verify composite evidence against the policy\\ 2. upload, encrypted to the node key\\ 3. open the sealed answer};
-  \node[stage, fill=blue!5, minimum width=9cm, minimum height=9mm, below=12mm of gen, align=center]
-    (kbs) {\textbf{KBS + policy engine} (customer's trust domain)\\ \scriptsize releases the index key only if CPU and GPU evidence are bound and the measurement, TCB and guest policy pass};
+  \node[stage, fill=blue!5, minimum width=9.5cm, minimum height=9mm, below=12mm of gen, align=center]
+    (kbs) {\textbf{KBS + policy engine} (customer's trust domain)\\ \scriptsize releases the index key only if the SNP report and the GPU transcript are bound to this session and the measurements, TCB and guest policy pass};
+  \draw[arr, <->] (embed.east) -- (gpunode.west |- embed.east) node[lbl, midway, above] {CUDA};
+  \draw[arr, <->] (gen.east) -- (gpunode.west |- gen.east) node[lbl, midway, above] {CUDA};
   \draw[arr] (client.north) |- (ingest.west) node[lbl, pos=0.8] {upload (encrypted)};
   \draw[arr] (retrieve.west) -- (client.east |- retrieve.west) node[lbl, midway, above] {sealed answer};
-  \draw[arr] (retrieve.east) -- (gpugen.west) node[lbl, midway, above] {retrieved chunks};
-  \draw[arr, <->] (cpuvm.south) -- (kbs.north -| cpuvm.south) node[lbl, midway] {prove, get key};
-  \draw[arr, <->] (gpuvm.south) |- ([yshift=2mm]kbs.east) node[lbl, pos=0.25, anchor=west, xshift=1mm] {prove};
+  \draw[arr, <->] (cvm.south) -- (kbs.north -| cvm.south) node[lbl, midway] {prove (SNP report + GPU transcript), get key};
   \draw[arr, <->] (client.south) |- ([yshift=2mm]kbs.west) node[lbl, pos=0.25, anchor=east, xshift=-1mm] {verify};
 \end{tikzpicture}
 \caption{One composite proof covers the whole pipeline: the SNP report of the VM and the attestation transcript of the GPU attached to it. The node proves itself to the KBS before it receives any key; the client verifies the same composite evidence before it uploads.}\label{fig:arch}
@@ -130,12 +131,12 @@ Every session starts with a 32-byte nonce from the verifier (the KBS, or the cli
 
 \begin{footnotesize}
 \begin{align*}
-\mathit{rd}_{\mathrm{cpu}} &= \mathrm{SHA\text{-}384}(\ell_{\mathrm{cpu}} \parallel \mathit{nonce} \parallel \mathit{pk}_{\mathrm{tee}})\\
+\mathit{rd}_{\mathrm{cpu}} &= \mathrm{SHA\text{-}384}(\ell_{\mathrm{cpu}} \parallel \mathit{nonce} \parallel \mathit{pk}_{\mathrm{tee}} \parallel \mathit{id}_{\mathrm{gpu},1} \parallel \cdots \parallel \mathit{id}_{\mathrm{gpu},n})\\
 \mathit{rd}_{\mathrm{gpu}} &= \mathrm{SHA\text{-}384}(\ell_{\mathrm{gpu}} \parallel \mathit{rd}_{\mathrm{cpu}})
 \end{align*}
 \end{footnotesize}
 
-with the labels \(\ell_{\mathrm{cpu}}\) = \texttt{attestrag-rd-v1}, \(\ell_{\mathrm{gpu}}\) = \texttt{attestrag-gpu-bind-v1} and length-prefixed concatenation, so that no choice of a shorter nonce and a longer key can collide with another pair. \texttt{report\_data} is the 64-byte field of the report that the guest chooses (offset 0x50 of an SNP report; a SHA-384 digest fills 48 bytes); the platform signs it together with the measurement and the TCB, so whatever is written there is bound to this chip and this launch.
+with the labels \(\ell_{\mathrm{cpu}}\) = \texttt{attestrag-rd-v2}, \(\ell_{\mathrm{gpu}}\) = \texttt{attestrag-gpu-bind-v1} and length-prefixed concatenation, so that no choice of a shorter nonce and a longer key can collide with another pair. \texttt{report\_data} is the 64-byte field of the report that the guest chooses (offset 0x50 of an SNP report; a SHA-384 digest fills 48 bytes); the platform signs it together with the measurement and the TCB, so whatever is written there is bound to this chip and this launch.
 
 The CPU rule binds two things. The \emph{nonce} is a 32-byte random value from the verifier, single-use and expiring after 60 s: a report whose \texttt{report\_data} matches it was produced in this session and cannot be a replay. This matters because SNP reports carry no timestamp; freshness rests entirely on the nonce. The \emph{public key} is generated inside the TEE for this session and its private half never leaves it: the KBS wraps the DEK to that key, so a man-in-the-middle who relays a genuine report cannot open the key it obtains, and one who substitutes its own key breaks the hash and with it the signature. Together the rule states one fact, proved once: \emph{this} TEE, in \emph{this} session, holds the private key.
 
@@ -155,7 +156,7 @@ The KBS holds, per tenant, the index DEK. \textbf{{[}design{]}}: a tenant master
 \item
   the node requests a challenge and receives a single-use nonce with a 60 s lifetime;
 \item
-  the node generates the ephemeral key pair, obtains the composite evidence over \texttt{cpu\_report\_data(nonce,\ pub)} and sends \texttt{(key\_id,\ nonce,\ pub,\ evidence)};
+  the node generates the ephemeral key pair, obtains the composite evidence over \texttt{cpu\_report\_data(nonce,\ pub,\ gpu\_ids)}, the identities being those of the GPUs its own driver talks to, and sends \texttt{(key\_id,\ nonce,\ pub,\ evidence)};
 \item
   the KBS consumes the nonce (even on failure), verifies the evidence, evaluates the policy, writes an audit record, and only on \texttt{allow} returns the DEK wrapped to \texttt{pub} with X25519 ECDH, HKDF-SHA256 (salt = both public keys, info = a versioned label and the key identifier) and AES-256-GCM;
 \item

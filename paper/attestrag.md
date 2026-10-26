@@ -105,7 +105,7 @@ The identities $gpu\_id_i$ are what the TEE's own driver reports for the GPUs it
 The KBS holds, per tenant, the index DEK. **[design]**: a tenant master key that wraps per-index DEKs, and per-session keys derived for the client channel; the current implementation has one DEK per key identifier. The release protocol is:
 
 1. the node requests a challenge and receives a single-use nonce with a 60 s lifetime;
-2. the node generates the ephemeral key pair, obtains the composite evidence over `cpu_report_data(nonce, pub)` and sends `(key_id, nonce, pub, evidence)`;
+2. the node generates the ephemeral key pair, obtains the composite evidence over `cpu_report_data(nonce, pub, gpu_ids)`, the identities being those of the GPUs its own driver talks to, and sends `(key_id, nonce, pub, evidence)`;
 3. the KBS consumes the nonce (even on failure), verifies the evidence, evaluates the policy, writes an audit record, and only on `allow` returns the DEK wrapped to `pub` with X25519 ECDH, HKDF-SHA256 (salt = both public keys, info = a versioned label and the key identifier) and AES-256-GCM;
 4. the node unwraps the DEK in TEE memory and opens the sealed index.
 
