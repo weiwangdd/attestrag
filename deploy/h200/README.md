@@ -22,7 +22,7 @@ Everything below runs as user `weiwang` without sudo (user in `kvm` group, `/dev
 
 | script | runs on | purpose |
 |---|---|---|
-| `launch-snpvm.sh [snp\|plain]` | host | start the VM. Env: `VERITY=1/0`, `KH=on/off`, `CPUS`, `MEM`, `SSH_PORT`, `GPU=<pci addr>` (pass a CC-mode GPU through; `PCI_HOLE`, `MMIO64MB` size the 64-bit MMIO window, `DEBUGCON=file` captures OVMF debug output). Default = SNP + kernel-hashes + dm-verity root + tmpfs overlay |
+| `launch-snpvm.sh [snp\|plain]` | host | start the VM. Env: `VERITY=1/0`, `KH=on/off`, `CPUS`, `MEM`, `SSH_PORT`, `GPU=<pci addr>` (pass a CC-mode GPU through; `PCI_HOLE`, `MMIO64MB` size the 64-bit MMIO window, `DEBUGCON=file` captures OVMF debug output), `VMNAME` (a second VM needs its own name, ports and `DATA`). Default = SNP + kernel-hashes + dm-verity root + tmpfs overlay |
 | `g 'cmd'` / `g -c file dest` | host | run a command in / copy a file into the guest (ssh port 2222) |
 | `build-verity-image.sh [outdir]` | host | golden qcow2 -> `rootfs.raw` + `rootfs.hash` + root hash + expected measurement (fixed salt, reproducible) |
 | `guest-verity-setup.sh` | guest (sudo) | one-time: initramfs hook + local-top script for dm-verity, fstab fixes, rebuild initrd |
@@ -32,6 +32,7 @@ Everything below runs as user `weiwang` without sudo (user in `kvm` group, `/dev
 | `guest-attestrag-setup.sh <src.tgz>` | guest (sudo) | install attestRAG + numpy/cryptography into `/opt/attestrag` (venv), fstab entry for the data disk. Source tarball: `git archive --format=tgz -o attestrag-src.tgz HEAD` |
 | `guest-gpu-setup.sh` | guest (sudo) | NVIDIA 580 open kernel modules + user space, llama.cpp CUDA build (sha256-pinned) next to the CPU build, `run-llama.sh` selector (CUDA when a GPU is present), `nvidia-cc-ready.service` (persistence mode + CC ready state before the servers start), `nvidia-ml-py` for the node's GPU attester, `--gpu auto` in `node.env` |
 | `a1-baseline.sh` (h200 only) | host | the unprotected baseline: GPU3 to normal mode, `launch-snpvm.sh plain` (standard OVMF; the AmdSev build only boots a `-kernel` through its SEV hashes table), node `--attester mock-insecure`, KBS/client `--insecure-mock` with `policies/insecure-baseline.json`, then back to CC mode and `relaunch.sh`. Finding: the NVIDIA driver refuses a normal-mode GPU inside a CVM (`Cannot attach gpu`), so the CVM and GPU-CC halves cannot be measured separately |
+| `infonly-baseline.sh` (h200 only) | host | the inference-only-TEE baseline: a second plain VM (`VMNAME=plainvm`, own ports and index copy) runs the retrieval side with mock attestation and calls the production CVM's llama-chat over an ssh tunnel; runs RGB, then tears everything down |
 | `gpu3-cc-on.sh` | host (sudo) | put GPU3 (`0000:44:00.0`) into CC mode with NVIDIA's gpu-admin-tools, hand it to `vfio-pci`, open `/dev/vfio/<group>`, `/dev/iommu` and the vfio cdev to the launching user |
 | `gpu3-release-cycle.sh` | host | the unbind only completes once no process holds `/dev/nvidia3`, and every CUDA/NVML process on the host opens all four device nodes: stops the host's GPU services and daemons in order, waits for the detach, starts them again (5–10 min outage of the other three GPUs' services) |
 | `guest-snpguest-setup.sh` | guest | download `snpguest` v0.10.0 |

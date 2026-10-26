@@ -10,6 +10,7 @@ MEM=${MEM:-16G}
 CPUS=${CPUS:-32}
 SSH_PORT=${SSH_PORT:-2222}
 NODE_PORT=${NODE_PORT:-8081}   # host port forwarded to the node service (guest :8080)
+VMNAME=${VMNAME:-snpvm}        # QEMU process name (scripts find the VM by it); a second VM needs its own name, ports and DATA
 MODE=${1:-snp}; [ $# -gt 0 ] && shift   # snp | plain
 # plain mode: the AmdSev OVMF only boots a -kernel through its SEV hashes table; use the standard build
 [ "$MODE" = plain ] && OVMF=${PLAIN_OVMF:-/usr/share/ovmf/OVMF.fd}
@@ -60,7 +61,7 @@ if [ "$MODE" = snp ]; then
 fi
 
 exec "$QEMU" \
-  -name snpvm -enable-kvm -machine "$MACHINE" -cpu EPYC-v4,host-phys-bits=on -smp "$CPUS" -m "$MEM" \
+  -name "$VMNAME" -enable-kvm -machine "$MACHINE" -cpu EPYC-v4,host-phys-bits=on -smp "$CPUS" -m "$MEM" \
   -bios "$OVMF" \
   -kernel "$KERNEL" -initrd "$INITRD" -append "$APPEND" \
   "${DISKS[@]}" "${GPUARGS[@]}" "${DBGARGS[@]}" \

@@ -212,6 +212,35 @@ a normal-mode GPU to the SEV-SNP VM: the NVIDIA driver refuses
 attach gpu`), so inside a CVM the GPU must be in CC mode. The two halves (CVM, CC GPU) are
 only separable with a plain VM plus a CC-mode GPU, which NVIDIA does not support either.
 
+### Inference-only TEE: protecting just the model call (2026-10-26)
+
+The deployment the paper argues against: the retrieval side (ingest, embedding, index, retrieval)
+in an ordinary VM, only generation inside a confidential VM with the confidential GPU.
+Built from the same parts: a second, plain QEMU VM from the step-12 image (`launch-snpvm.sh
+plain`, `VMNAME=plainvm`, its own copy of the sealed index, node with `--attester
+mock-insecure`, embedding on 32 vCPUs since the one CC GPU belongs to the CVM) whose node calls
+the production CVM's llama-chat over an ssh tunnel (an encrypted channel to a confidential
+inference endpoint, as in practice). `deploy/h200/infonly-baseline.sh` runs it and tears it down.
+
+| 7B generator | plain VM + GPU | **inference-only TEE** | CVM + CC GPU (AttestRAG) |
+|---|---|---|---|
+| en: ask p50 / p90 | 0.36 / 0.53 s | 0.46 / 0.64 s | 0.46 / 0.63 s |
+| zh: ask p50 / p90 | 0.54 / 0.76 s | 0.63 / 0.88 s | 0.62 / 0.87 s |
+| en: 8 users q/s | 4.21 | 3.28 | 3.55 |
+| zh: 8 users q/s | 3.36 | 2.68 | 2.64 |
+| accuracy / rejection | same | same | same |
+| what the client can verify | nothing | the model call | the whole pipeline |
+
+Protecting the whole pipeline costs the same as protecting the model call alone: the two
+confidential configurations are within noise of each other on every row, and the entire
+confidential-computing overhead (16–30 % on the median answer, 16–21 % of throughput against
+the plain VM) is the confidential-GPU generation path that the inference-only deployment pays
+too. Moving ingest, embedding, index and retrieval into the CVM adds nothing measurable, and
+it is what turns "the model ran in a TEE" into a statement about the documents, the index and
+the answers. Query embedding on the plain VM's CPU costs ~35 ms warm (9 ms on the CVM's GPU),
+which is why the inference-only numbers are not strictly below the CVM's; the hop to the
+remote generator is the rest.
+
 ### Session cost with NVIDIA's services (RIM + OCSP, 2026-10-24)
 
 With `--gpu-rim` the client (or KBS) also fetches the driver and VBIOS reference manifests,
@@ -241,6 +270,6 @@ python scripts/rag_bench.py --node http://127.0.0.1:8081 --policy ~/snp/policy-h
 ```
 
 Raw results: `bench-{zh,en}_refine.json`, `bench-*-sweep.json`, `bench-gpu-*.json` (GPU, 1.5B) and
-`bench-gpu7b-*.json` (GPU, 7B) and `bench-plain7b-*.json` (plain VM baseline) on h200 in `~/snp`
+`bench-gpu7b-*.json` (GPU, 7B), `bench-plain7b-*.json` (plain VM baseline) and `bench-infonly7b-*.json` (inference-only TEE) on h200 in `~/snp`
 (per-question answers, hits, latencies). The RGB files are downloaded to
 `~/.cache/attestrag/rgb/` on first use.
