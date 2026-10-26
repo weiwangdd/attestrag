@@ -8,7 +8,6 @@ import time
 from typing import Protocol
 
 from ..attest.base import CompositeVerifier
-from ..attest.binding import cpu_report_data
 from ..attest.types import CompositeClaims, CompositeEvidence
 from ..common.crypto import WrappedKey, new_key, open_sealed, wrap_to
 from ..node import ANSWER_INFO, INGEST_INFO, QUERY_INFO
@@ -37,7 +36,7 @@ class AttestRAGClient:
         nonce = os.urandom(32)
         evidence, node_pub = self.node.attestation(nonce)
         try:
-            claims = self.verifier.verify(evidence, cpu_report_data(nonce, node_pub))
+            claims = self.verifier.verify_for(evidence, nonce, node_pub)
         except Exception as e:
             raise NodeUntrusted(f"attestation failed: {e}") from e
         decision = evaluate(self.policy, claims, time.time())

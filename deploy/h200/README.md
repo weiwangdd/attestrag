@@ -125,7 +125,10 @@ mode; the other three GPUs keep serving the host's own workloads. What it took, 
    specifies), matches the firmware ID in the certificate against the report, and reduces the 64
    DMTF measurement blocks to one SHA-384 that the policy pins (`allowed_gpu_measurements`,
    `require_gpu` in `policies/h200-genoa.json`). A real transcript is the golden case in
-   `tests/fixtures/nvidia/h200/`.
+   `tests/fixtures/nvidia/h200/`. Since step 12 the CPU report also commits to the GPU's identity:
+   `cpu_rd = H("attestrag-rd-v2" || nonce || pk || SHA-384(AK certificate))`, so a GPU half swapped in
+   transit by an operator with another confidential GPU no longer matches (the attack the Tamarin
+   model in `formal/` found against the first binding).
 5. **NVIDIA services** (`--gpu-rim` on the KBS, the SDK and the benchmark; `attestrag/attest/nvidia_rim.py`):
    the verifier fetches NVIDIA's reference manifests for the driver (`NV_GPU_DRIVER_GH100_<version>`)
    and the VBIOS (`NV_GPU_VBIOS_<project>_<sku>_<chip>_<vbios>`), checks each manifest's certificate

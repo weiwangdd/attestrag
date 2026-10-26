@@ -5,7 +5,7 @@
 set -u
 cd "$(dirname "$0")"
 TIMEOUT=${TIMEOUT:-900}
-for T in attestrag_release.spthy attestrag_release_gpuid.spthy; do
+for T in attestrag_release.spthy attestrag_release_v1.spthy; do
   echo "== $T"
   for L in $(grep -oE '^lemma [A-Za-z_0-9]+' "$T" | awk '{print $2}'); do
     ( out=$(timeout "$TIMEOUT" tamarin-prover --prove="$L" --auto-sources "$T" 2>&1)

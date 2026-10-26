@@ -305,6 +305,30 @@ class NvidiaAttester(Attester):
     def __init__(self, index: int = 0):
         self.index = index
 
+    @staticmethod
+    def _chain(pynvml, h) -> bytes:
+        cert = pynvml.nvmlDeviceGetConfComputeGpuCertificate(h)
+        return bytes(cert.attestationCertChain[:cert.attestationCertChainSize])
+
+    def identity(self) -> bytes:
+        """SHA-384 over the GPU's attestation-key certificate, committed into the CPU report."""
+        try:
+            import pynvml
+            pynvml.nvmlInit()
+        except Exception as e:  # noqa: BLE001
+            raise AttestationError(f"NVML init failed: {e}") from e
+        try:
+            chain = self._chain(pynvml, pynvml.nvmlDeviceGetHandleByIndex(self.index))
+        except Exception as e:  # noqa: BLE001
+            raise AttestationError(f"NVML certificate query failed: {e}") from e
+        finally:
+            try:
+                pynvml.nvmlShutdown()
+            except Exception:  # noqa: BLE001
+                pass
+        from .base import gpu_identity
+        return gpu_identity(Evidence(Platform.NVIDIA_CC, b"", b"", (chain,)))
+
     def attest(self, report_data: bytes) -> Evidence:
         try:
             import pynvml  # nvidia-ml-py, only needed inside the GPU CVM
@@ -321,8 +345,7 @@ class NvidiaAttester(Attester):
             h = pynvml.nvmlDeviceGetHandleByIndex(self.index)
             rep = pynvml.nvmlDeviceGetConfComputeGpuAttestationReport(h, list(nonce))
             blob = bytes(rep.attestationReport[:rep.attestationReportSize])
-            cert = pynvml.nvmlDeviceGetConfComputeGpuCertificate(h)
-            chain = bytes(cert.attestationCertChain[:cert.attestationCertChainSize])
+            chain = self._chain(pynvml, h)
         except AttestationError:
             raise
         except Exception as e:  # noqa: BLE001

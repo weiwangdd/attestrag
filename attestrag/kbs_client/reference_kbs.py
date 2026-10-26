@@ -5,7 +5,7 @@ customer's own trust domain (or on Trustee KBS):
 
   1. client -> challenge()                      : single-use nonce
   2. client -> request_key(id, nonce, pk, ev)   : evidence with
-        report_data = cpu_report_data(nonce, pk)
+        report_data = cpu_report_data(nonce, pk, gpu identities)
   3. KBS verifies evidence, evaluates policy, and only then returns the key
      wrapped to `pk` (whose private half never leaves the TEE).
 """
@@ -17,7 +17,6 @@ import time
 from dataclasses import dataclass
 
 from ..attest.base import AttestationError, CompositeVerifier
-from ..attest.binding import cpu_report_data
 from ..attest.types import CompositeEvidence
 from ..common.crypto import WrappedKey, wrap_to
 from ..policy.engine import Decision, Policy, evaluate
@@ -75,7 +74,7 @@ class ReferenceKBS:
         if key_id not in self._keys:
             self._deny(key_id, (f"unknown key id {key_id!r}",))
         try:
-            claims = self.verifier.verify(evidence, cpu_report_data(nonce, tee_pubkey))
+            claims = self.verifier.verify_for(evidence, nonce, tee_pubkey)
         except AttestationError as e:
             self._deny(key_id, (f"attestation: {e}",))
         decision: Decision = evaluate(self.policy, claims, self.clock())

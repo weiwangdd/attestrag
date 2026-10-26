@@ -29,11 +29,10 @@ def test_deny_old_tcb(kbs, make_attester):
 
 
 def test_nonce_single_use(kbs, make_attester):
-    from attestrag.attest import cpu_report_data
     att = make_attester()
     n = kbs.challenge()
     pub = b"\x09" * 32
-    ev = att.attest(cpu_report_data(n, pub))
+    ev = att.attest_for(n, pub)
     kbs.request_key("dek", n, pub, ev)
     with pytest.raises(KeyReleaseDenied, match="nonce"):
         kbs.request_key("dek", n, pub, ev)
@@ -41,8 +40,7 @@ def test_nonce_single_use(kbs, make_attester):
 
 def test_key_bound_to_attested_pubkey(kbs, make_attester):
     """Evidence for pubkey A cannot be used to get the key wrapped to pubkey B."""
-    from attestrag.attest import cpu_report_data
     n = kbs.challenge()
-    ev = make_attester().attest(cpu_report_data(n, b"A" * 32))
+    ev = make_attester().attest_for(n, b"A" * 32)
     with pytest.raises(KeyReleaseDenied, match="report_data"):
         kbs.request_key("dek", n, b"B" * 32, ev)

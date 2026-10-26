@@ -58,6 +58,12 @@ class MockAttester(Attester):
         self.vendor = vendor
         self.config = config or MockTEEConfig()
 
+    def identity(self) -> bytes | None:
+        if not self.config.platform.is_gpu:
+            return None
+        from .base import gpu_identity
+        return gpu_identity(Evidence(self.config.platform, b"", b"", (self.vendor.root_public,)))
+
     def attest(self, report_data: bytes) -> Evidence:
         body = json.dumps(
             {

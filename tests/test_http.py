@@ -52,10 +52,9 @@ def test_http_kbs_denies_bad_measurement(tmp_path, kbs_url, make_attester):
 
 
 def test_http_kbs_nonce_single_use(kbs_url, make_attester):
-    from attestrag.attest import cpu_report_data
     kbs = HttpKBS(kbs_url)
     n, pub = kbs.challenge(), b"\x09" * 32
-    ev = make_attester().attest(cpu_report_data(n, pub))
+    ev = make_attester().attest_for(n, pub)
     kbs.request_key("index-dek", n, pub, ev)
     with pytest.raises(KeyReleaseDenied, match="nonce"):
         kbs.request_key("index-dek", n, pub, ev)

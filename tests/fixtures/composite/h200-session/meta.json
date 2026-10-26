@@ -1,0 +1,7 @@
+{
+  "label": "attestrag-h200-session-v10-2026-10-26",
+  "nonce": "2eb3ee63dd1037046eaebebe845e29f9500610db1ba0b7f45dbd8e6a8368c888",
+  "node_pub": "19b5a29fff6c670fc892e719b94899819e600a077ec93efb2ac89ebc6a0a7659",
+  "verify_at": 1792836357,
+  "note": "captured through /attestation of the step-12 node on h200 with H200 NVL GPU3 in CC mode: CPU report_data = SHA-384('attestrag-rd-v2' || nonce || node_pub || gpu_id), gpu_id = SHA-384 of the GPU's AK certificate; verify with CompositeVerifier.verify_for(evidence, nonce, node_pub). verify_at sits inside the validity window of the cached OCSP responses in tests/fixtures/nvidia/h200/ocsp (same GPU, same certificates)."
+}

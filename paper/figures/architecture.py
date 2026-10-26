@@ -89,7 +89,7 @@ box(30, 195, 170, 115, "Client SDK / CLI", ["attestrag.sdk", "verify evidence + 
 # --- node process ------------------------------------------------------------------
 box(350, 95, 200, 310, "attestrag-node :8080", ["one Python process (attestrag.node_server)"], kind="primary", r=8)
 box(365, 140, 170, 55, "transport.JsonServer", ["/attestation  /ingest  /query"], sub_size=9.5)
-box(365, 205, 170, 68, "Snp + Nvidia attester", ["configfs-tsm report; NVML transcript", "cpu_rd = H(nonce || pk); gpu = H(cpu_rd)"], sub_size=9)
+box(365, 205, 170, 68, "Snp + Nvidia attester", ["configfs-tsm report; NVML transcript", "cpu_rd = H(nonce || pk || gpu_id); gpu = H(cpu_rd)"], sub_size=9)
 box(365, 283, 170, 55, "ingest + retrieve", ["parse, chunk (800 chars), top-k"], sub_size=9.5)
 box(365, 348, 170, 50, "KBSClient", ["ephemeral X25519 key; unwraps DEK"], sub_size=9.5)
 
@@ -140,7 +140,7 @@ text(750, 565, "dashed frame = trust boundary; solid box = process or file", 9.5
 text(750, 579, "red = attested code;  green = key release;", 9.5, fill=MUTED, anchor="start")
 text(750, 593, "orange = plaintext only in encrypted guest RAM;", 9.5, fill=MUTED, anchor="start")
 text(750, 607, "grey = untrusted or external", 9.5, fill=MUTED, anchor="start")
-text(750, 629, "AttestRAG on h200, state of the code on 2026-10-23", 9.5, fill=MUTED, anchor="start")
+text(750, 629, "AttestRAG on h200, state of the code on 2026-10-26", 9.5, fill=MUTED, anchor="start")
 
 svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" font-family="{FONT}">'
        f'<rect width="{W}" height="{H}" fill="#ffffff"/>' + markers() + "".join(parts) + "</svg>")

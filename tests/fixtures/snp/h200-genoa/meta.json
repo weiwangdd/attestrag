@@ -1,10 +1,10 @@
 {
-  "note": "Real SEV-SNP report from the h200 host (2x EPYC 9554 Genoa, SEV firmware 1.55 build 42), guest built by deploy/h200 (OVMF.amdsev 2025.11, kernel-hashes, dm-verity root, attestRAG 0.0.1 + HTTP transport in /opt/attestrag, llama.cpp b11753 + Qwen3-Embedding-0.6B + Qwen2.5-7B-Instruct Q4_K_M (1.5B kept) in /opt/llm, Qdrant 1.19.2 in /opt/qdrant, overlayroot=tmpfs:recurse=0, 32 vCPUs / 32 llama threads, chat -c 16384 -np 4, NVIDIA 580 open driver + llama.cpp CUDA build, nvidia-cc-ready unit, swiotlb=262144; captured 2026-10-23 with H200 NVL GPU3 passed through in CC mode). VCEK fetched from AMD KDS on 2026-10-20; ARK/ASK are the bundled AMD roots.",
+  "note": "Real SEV-SNP report from the h200 host (2x EPYC 9554 Genoa, SEV firmware 1.55 build 42), guest built by deploy/h200 (OVMF.amdsev 2025.11, kernel-hashes, dm-verity root, attestRAG 0.0.1 + HTTP transport in /opt/attestrag, llama.cpp b11753 + Qwen3-Embedding-0.6B + Qwen2.5-7B-Instruct Q4_K_M (1.5B kept) in /opt/llm, Qdrant 1.19.2 in /opt/qdrant, overlayroot=tmpfs:recurse=0, 32 vCPUs / 32 llama threads, chat -c 16384 -np 4, NVIDIA 580 open driver + llama.cpp CUDA build, nvidia-cc-ready unit, swiotlb=262144; captured 2026-10-26 from the step-12 image (GPU identity binding attestrag-rd-v2) with H200 NVL GPU3 passed through in CC mode). VCEK fetched from AMD KDS on 2026-10-20; ARK/ASK are the bundled AMD roots.",
   "host": "h200",
   "product": "Genoa",
   "report_version": 5,
-  "report_data": "ba617d821778e08d10e05dad3de64d2b9de2b7832341a28013aac7f02a4a2ee96e4ff6ca641fc4a6cc9158886da6db19",
-  "measurement": "19f8def8e96f243ee2ba69bcdb4105c48c3557fea976b5454ad2a2f759794c0b085423ffa9265e592d70a1901e600490",
+  "report_data": "04df955a13782fbf1d3c434146e9d3d1e2e9c0c6ea54b28012e2a463036727e6fa48d2e60f9cfcead2bae87e7c9dbae4",
+  "measurement": "7d72b266c994cc08f641e2ddf311106327da643b5e6a3e845a479e5a6933351f581fb382de249f2ba0eb4aab5c131d9c",
   "tcb": {
     "bootloader": 10,
     "tee": 0,

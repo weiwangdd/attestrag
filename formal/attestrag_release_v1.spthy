@@ -1,11 +1,9 @@
 /*
- * VARIANT of attestrag_release.spthy: the CPU report_data also commits to the attached GPU's
- * attestation public key, rd = h('rd', nonce, pk, pkg). This is the one-line change that closes
- * the residual gap the base model exposes (gpu_is_the_attached_one): a GPU half substituted in
- * transit no longer matches the CPU report. Not yet implemented in the code (it changes the
- * report_data layout, hence the golden fixtures).
- *
- * AttestRAG key-release protocol, symbolic model (Tamarin).
+ * AttestRAG key-release protocol, symbolic model (Tamarin) -- the PREVIOUS binding
+ * (attestrag-rd-v1: rd = h('rd', nonce, pk), no GPU identity in the CPU report), kept because
+ * Tamarin refutes gpu_is_the_attached_one for it with a concrete trace: an operator's own
+ * certified confidential GPU signs the public h('gpu', rd) and the GPU half is swapped in
+ * transit. attestrag_release.spthy is the binding the code uses now.
  *
  * Parties
  *   Platform : AMD PSP (CPU reports) and NVIDIA (GPU reports), one signing key each. Trusted.
@@ -29,7 +27,7 @@
  *
  *   tamarin-prover --prove formal/attestrag_release.spthy
  */
-theory AttestRAG_KeyRelease_GpuIdentity
+theory AttestRAG_KeyRelease_v1
 begin
 
 builtins: signing, hashing, asymmetric-encryption, symmetric-encryption
@@ -67,7 +65,7 @@ rule TEE_Start_Other:
 rule TEE_Attest:
   let pkx  = pk(~x)
       pkg  = pk(~skg)
-      rd   = h(<'rd', n, pkx, pkg>)
+      rd   = h(<'rd', n, pkx>)
       grd  = h(<'gpu', rd>)
       rep  = sign(<'report', m, rd>, ~skP)
       grep = sign(<'gpureport', 'goodgpu', grd>, ~skg)
@@ -110,7 +108,7 @@ rule KBS_Challenge:
 // request_key: nonce consumed (single use), both signatures over this session's rd, policy
 // 'good' / 'goodgpu', then DEK wrapped to the pk the report vouches for.
 rule KBS_Release:
-  let rd  = h(<'rd', n, pkx, pkg>)
+  let rd  = h(<'rd', n, pkx>)
       grd = h(<'gpu', rd>)
   in
   [ KBSNonce(n), !KBSKey(~dek), !PlatformPub(pkP), !NvidiaPub(pkNV),
@@ -134,7 +132,7 @@ rule Client_Connect:
 
 // verify evidence under the same policy, then upload a document wrapped to pk
 rule Client_Upload:
-  let rd  = h(<'rd', cn, pkx, pkg>)
+  let rd  = h(<'rd', cn, pkx>)
       grd = h(<'gpu', rd>)
   in
   [ ClientSess(cn), !PlatformPub(pkP), !NvidiaPub(pkNV), Fr(~doc),
@@ -188,9 +186,11 @@ lemma no_replay:
 //     nonce was issued: evidence from another session or machine fails the binding.
 lemma gpu_bound_to_session:
   "All n pkx pkg #i. AcceptedGpu(n, pkx, pkg)@i
-     ==> Ex #j #k. Challenge(n)@k & GpuSigned(pkg, h(<'gpu', h(<'rd', n, pkx, pkg>)>))@j & k < j & j < i"
+     ==> Ex #j #k. Challenge(n)@k & GpuSigned(pkg, h(<'gpu', h(<'rd', n, pkx>)>))@j & k < j & j < i"
 
-// P3' With the GPU identity inside rd this now holds: the accepted GPU is the attached one.
+// P3' What the binding does NOT give: that the accepted GPU is the one attached to the attesting
+//     VM. Expected to FAIL: an operator with a certified confidential GPU of its own has it sign
+//     h('gpu', rd) for a victim session (rd is public) and substitutes the GPU half in transit.
 lemma gpu_is_the_attached_one:
   "All n pkx pkg #i. AcceptedGpu(n, pkx, pkg)@i ==> Ex #j. GpuAttached(pkg, pkx)@j"
 

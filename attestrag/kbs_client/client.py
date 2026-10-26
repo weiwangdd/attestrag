@@ -7,7 +7,6 @@ from typing import Protocol
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from ..attest.base import CompositeAttester
-from ..attest.binding import cpu_report_data
 from ..attest.types import CompositeEvidence
 from ..common.crypto import WrappedKey, unwrap, x25519_public_bytes
 
@@ -29,6 +28,6 @@ class KBSClient:
         eph = X25519PrivateKey.generate()  # lives only in TEE memory
         pub = x25519_public_bytes(eph.public_key())
         nonce = self.kbs.challenge()
-        evidence = self.attester.attest(cpu_report_data(nonce, pub))
+        evidence = self.attester.attest_for(nonce, pub)
         wrapped = self.kbs.request_key(key_id, nonce, pub, evidence)
         return unwrap(eph, wrapped, info=key_id.encode())

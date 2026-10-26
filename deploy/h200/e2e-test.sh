@@ -80,7 +80,11 @@ JSON
 if [ -n "${POLICY:-}" ]; then cp "$POLICY" "$TMP/good.json"; else mkpolicy "$TMP/good.json" "$EXPECTED" "$MIN_TCB_SNP"; fi
 mkpolicy "$TMP/bad-measurement.json" "$(printf '0%.0s' $(seq 1 96))" "$MIN_TCB_SNP"
 mkpolicy "$TMP/bad-tcb.json" "$EXPECTED" 99
-for f in good bad-measurement bad-tcb; do "$G" -c "$TMP/$f.json" "/tmp/e2e-$f.json" >/dev/null; done
+# the in-guest demo verifies with an in-process KBS that has no NVIDIA services (no --gpu-rim there), so it gets
+# the policy without the OCSP/RIM requirements; the node/client path below runs the full policy
+python3 -c "import json,sys; d=json.load(open(sys.argv[1])); d['require_gpu_ocsp']=False; d['require_gpu_rim']=False; json.dump(d, open(sys.argv[2],'w'))" "$TMP/good.json" "$TMP/demo-good.json"
+"$G" -c "$TMP/demo-good.json" "/tmp/e2e-good.json" >/dev/null
+for f in bad-measurement bad-tcb; do "$G" -c "$TMP/$f.json" "/tmp/e2e-$f.json" >/dev/null; done
 
 run_demo() { "$G" "sudo $PY -m attestrag.demo --snp --gpu auto --policy /tmp/e2e-$1.json" > "$TMP/out-$1.txt" 2>&1; }
 

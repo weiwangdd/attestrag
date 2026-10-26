@@ -23,7 +23,7 @@ rm -rf "$PREFIX" && mkdir -p "$PREFIX/src"
 tar xzf "$SRC" -C "$PREFIX/src"
 python3 -m venv "$PREFIX/venv"
 "$PREFIX/venv/bin/pip" install -q --upgrade pip
-"$PREFIX/venv/bin/pip" install -q "$PREFIX/src" pytest
+"$PREFIX/venv/bin/pip" install -q "$PREFIX/src" pytest nvidia-ml-py   # nvidia-ml-py: the node's GPU attester (NVML); harmless without a GPU
 rm -f /usr/local/bin/attestrag-python   # never write through an old symlink (it points at the system python)
 printf '#!/bin/sh\nexec %s/venv/bin/python "$@"\n' "$PREFIX" > /usr/local/bin/attestrag-python
 chmod 755 /usr/local/bin/attestrag-python   # a symlink would defeat venv detection

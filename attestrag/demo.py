@@ -17,7 +17,7 @@ import os
 import sys
 import tempfile
 
-from .attest import CompositeAttester, CompositeVerifier, Platform, cpu_report_data
+from .attest import CompositeAttester, CompositeVerifier, Platform
 from .common.crypto import new_key
 from .embed import HashingEmbedder
 from .generate import StubGenerator
@@ -79,8 +79,8 @@ def snp_main(policy_path: str | None, product: str | None, gpu: list[str] | None
         with open(policy_path) as f:
             policy = Policy.from_json(f.read())
     else:
-        rd = cpu_report_data(os.urandom(32), bytes(32))
-        claims = verifier.verify(attester.attest(rd), rd)
+        nonce, pk = os.urandom(32), bytes(32)
+        claims = verifier.verify_for(attester.attest_for(nonce, pk), nonce, pk)
         probe = claims.cpu
         print("WARNING: no --policy given; trusting observed measurement/TCB (TOFU).", file=sys.stderr)
         observed = {

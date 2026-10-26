@@ -17,7 +17,6 @@ from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from .attest.base import CompositeAttester
-from .attest.binding import cpu_report_data
 from .attest.types import CompositeEvidence
 from .common.crypto import WrappedKey, seal, unwrap, x25519_public_bytes
 from .embed import Embedder
@@ -75,7 +74,7 @@ class AttestRAGNode:
 
     # --- client-facing API -------------------------------------------------
     def attestation(self, nonce: bytes) -> tuple[CompositeEvidence, bytes]:
-        return self.attester.attest(cpu_report_data(nonce, self.transport_pub)), self.transport_pub
+        return self.attester.attest_for(nonce, self.transport_pub), self.transport_pub
 
     def ingest(self, doc_id: str, wrapped: WrappedKey, content_type: str = "text/plain") -> int:
         index = self._require_started()

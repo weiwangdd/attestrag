@@ -1,1 +1,1 @@
-root=/dev/mapper/vroot ro rootflags=noload verity_dev=/dev/vda verity_hash=/dev/vdb roothash=9ea75518c93fe30ec2d7ad65db3e1c271c497d8a34158440b95886d579e37ecf overlayroot=tmpfs:recurse=0 swiotlb=262144 console=ttyS0
+root=/dev/mapper/vroot ro rootflags=noload verity_dev=/dev/vda verity_hash=/dev/vdb roothash=f71e7e5ce0af6cccba6c7942e6f7774edd4e716fabf408f286c36a72503ec088 overlayroot=tmpfs:recurse=0 swiotlb=262144 console=ttyS0

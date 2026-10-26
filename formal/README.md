@@ -31,7 +31,7 @@ and the two measurement constants. Not modelled: side channels, physical attacks
 
 ## Results
 
-`attestrag_release.spthy` (the protocol as implemented):
+`attestrag_release_v1.spthy` (the protocol as first implemented, `attestrag-rd-v1`):
 
 | lemma | property | result |
 |---|---|---|
@@ -52,12 +52,12 @@ binding. Consequence: a host can hide a GPU with disallowed firmware behind one 
 session freshness property (`gpu_bound_to_session`) still holds, so evidence from *another
 session* is rejected; what is not established is *which* GPU of this session's machine signed.
 
-`attestrag_release_gpuid.spthy` changes one line of the binding, `rd = h('rd', nonce, pk, pkg)`,
-with `pkg` the attestation public key of the GPU the TEE's own driver talks to. Then
-`gpu_is_the_attached_one` is verified along with the other seven: a substituted GPU half no
-longer matches the CPU report. This is the change the implementation should make (it alters
-`report_data`, hence the golden fixtures and the KBS/client side that recompute it); until then
-the policy's pinned firmware digest plus the RIM check bound what a substituted GPU can hide.
+`attestrag_release.spthy` is the binding the code uses now (`attestrag-rd-v2`): one line changed,
+`rd = h('rd', nonce, pk, pkg)`, with `pkg` the attestation key of the GPU the TEE's own driver
+talks to (in the code: SHA-384 of the GPU's AK certificate, `attest.base.gpu_identity`, sorted
+over all attached GPUs). Then `gpu_is_the_attached_one` is verified along with the other seven:
+a substituted GPU half no longer matches the CPU report. `tests/test_gpu_identity_binding.py`
+replays the attack against both bindings with mock GPUs.
 
 ## Reading the model
 
