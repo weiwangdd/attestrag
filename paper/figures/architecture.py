@@ -75,12 +75,12 @@ def markers() -> str:
     return "<defs>" + "".join(out) + "</defs>"
 
 
-W, H = 1090, 670
+W, H = 1090, 700
 
 # --- frames -----------------------------------------------------------------
 frame(20, 20, 1050, 450, "h200 host (untrusted: hypervisor, operator, disk, network)   AMD EPYC 9554, SEV firmware 1.55")
 frame(330, 55, 520, 385, "SEV-SNP confidential VM, 32 vCPU + H200 NVL (CC mode) - measured: OVMF + kernel-hashes + dm-verity rootfs", "#7a3030")
-frame(330, 535, 400, 130, "customer trust domain", "#1e7d3a")
+frame(330, 535, 400, 150, "customer trust domain", "#1e7d3a")
 
 # --- client ----------------------------------------------------------------------
 box(30, 195, 170, 115, "Client SDK / CLI", ["attestrag.sdk", "verify evidence + policy JSON", "(same checks as the KBS)",
@@ -108,11 +108,13 @@ box(880, 200, 170, 98, "data disk (untrusted)", ["/var/lib/attestrag", "qdrant-a
                                               "written after every ingest,", "restored at node start"], kind="muted", sub_size=9.5)
 
 # --- KBS and KDS ----------------------------------------------------------------
-box(350, 558, 360, 96, "KBS :8800  (attestrag.kbs_server)", ["today a host process on 127.0.0.1", "SnpVerifier: ARK pin, chain, hwID, SPL, signature, report_data",
-                                                              "NvidiaVerifier: NVIDIA root pin, P-384, request nonce, FWID, 64-block digest",
+box(350, 558, 360, 110, "KBS :8800  (attestrag.kbs_server)", ["today a host process on 127.0.0.1", "SnpVerifier: ARK pin, chain, hwID, SPL, signature, report_data",
+                                                              "NvidiaVerifier: NVIDIA root pin, P-384, request nonce, FWID, 64-block digest,",
+                                                              "RIM match (driver + VBIOS) and OCSP via NVIDIA services (--gpu-rim)",
                                                               "policy engine: measurement, min TCB, guest policy, GPU digest  |  keys, audit"],
     kind="ok", sub_size=9.5)
 box(30, 560, 170, 62, "AMD KDS", ["VCEK per chip + TCB", "(fetched once, cached on disk)"], kind="muted")
+box(30, 632, 170, 58, "NVIDIA RIM + OCSP", ["driver/VBIOS reference manifests,", "certificate revocation (cached)"], kind="muted", sub_size=9)
 
 # --- edges -----------------------------------------------------------------------
 arrow([(200, 240), (350, 240)], "nonce -> evidence;\nupload and question\nwrapped to node_pub", (275, 205), size=9)
@@ -134,13 +136,14 @@ text(538, 521, "released only if verification and policy pass", 10, fill=COL["ok
 
 arrow([(115, 310), (115, 560)], "VCEK", (108, 440), kind="muted", anchor="end")
 arrow([(350, 591), (200, 591)], "VCEK", (275, 585), kind="muted")
+arrow([(350, 640), (200, 655)], "manifests, OCSP", (275, 638), kind="muted", size=9)
 
 # --- legend ----------------------------------------------------------------
 text(750, 565, "dashed frame = trust boundary; solid box = process or file", 9.5, fill=MUTED, anchor="start")
 text(750, 579, "red = attested code;  green = key release;", 9.5, fill=MUTED, anchor="start")
 text(750, 593, "orange = plaintext only in encrypted guest RAM;", 9.5, fill=MUTED, anchor="start")
 text(750, 607, "grey = untrusted or external", 9.5, fill=MUTED, anchor="start")
-text(750, 629, "AttestRAG on h200, state of the code on 2026-10-26", 9.5, fill=MUTED, anchor="start")
+text(750, 629, "AttestRAG on h200, state of the code on 2026-10-27", 9.5, fill=MUTED, anchor="start")
 
 svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" font-family="{FONT}">'
        f'<rect width="{W}" height="{H}" fill="#ffffff"/>' + markers() + "".join(parts) + "</svg>")

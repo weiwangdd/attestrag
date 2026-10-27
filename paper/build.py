@@ -115,6 +115,9 @@ TIKZ = r"""\begin{figure*}[t]\centering
     (client) {\textbf{client SDK}\\[1pt] 1. verify composite evidence against the policy\\ 2. upload, encrypted to the node key\\ 3. open the sealed answer};
   \node[stage, fill=blue!5, minimum width=9.5cm, minimum height=9mm, below=12mm of gen, align=center]
     (kbs) {\textbf{KBS + policy engine} (customer's trust domain)\\ \scriptsize releases the index key only if the SNP report and the GPU transcript are bound to this session and the measurements, TCB and guest policy pass};
+  \node[stage, fill=black!4, right=4mm of kbs, text width=2.3cm, minimum height=9mm, align=center]
+    (nv) {\scriptsize \textbf{AMD KDS, NVIDIA RIM + OCSP}\\ \scriptsize VCEK, reference manifests, revocation (cached)};
+  \draw[arr, <->, gray] (kbs.east) -- (nv.west);
   \draw[arr, <->] (embed.east) -- (gpunode.west |- embed.east) node[lbl, midway, above] {CUDA};
   \draw[arr, <->] (gen.east) -- (gpunode.west |- gen.east) node[lbl, midway, above] {CUDA};
   \draw[arr] (client.north) |- (ingest.west) node[lbl, pos=0.8] {upload (encrypted)};
@@ -206,13 +209,18 @@ TEMPLATE = r"""\documentclass[letterpaper,twocolumn,10pt]{article}
 def main() -> None:
     title, note, body_md = preprocess(SRC.read_text())
     OUT.mkdir(exist_ok=True)
-    (OUT / "body.md").write_text(body_md.replace("figures/architecture.svg", "figures/architecture.pdf"))
+    (OUT / "body.md").write_text(re.sub(r"figures/([a-z]+)\.svg", r"figures/\1.pdf", body_md))
     body = subprocess.run(["pandoc", "-f", "markdown-smart", "-t", "latex", "--wrap=none", "--shift-heading-level-by=-1", str(OUT / "body.md")],
                           check=True, capture_output=True, text=True).stdout
     m = re.search(r"\\begin\{figure\}\n\\centering\n[^\n]*architecture\.pdf[^\n]*\n(\\caption\{.*?\})\n\\end\{figure\}", body, re.S)
     assert m, "architecture figure not found in pandoc output"
     body = body[:m.start()] + ("\\begin{figure*}[t]\n\\centering\n\\includegraphics[width=\\textwidth]{figures/architecture.pdf}\n"
                                + m.group(1) + "\\label{fig:impl}\n\\end{figure*}") + body[m.end():]
+    # other figures: one column wide, labelled after the file name
+    def one_col(mm):
+        return ("\\begin{figure}[t]\n\\centering\n\\includegraphics[width=\\columnwidth]{figures/%s.pdf}\n%s\\label{fig:%s}\n\\end{figure}"
+                % (mm.group(1), mm.group(2), mm.group(1)))
+    body = re.sub(r"\\begin\{figure\}\n\\centering\n[^\n]*figures/([a-z]+)\.pdf[^\n]*\n(\\caption\{.*?\})\n\\end\{figure\}", one_col, body, flags=re.S)
     shutil.copytree(HERE / "figures", OUT / "figures", dirs_exist_ok=True)
     tex = TEMPLATE % {"title": esc(title), "note": esc(note), "body": body}
     (OUT / "attestrag.tex").write_text(tex)
