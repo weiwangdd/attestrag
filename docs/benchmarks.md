@@ -177,6 +177,34 @@ far inside the CPU-only envelope (1.4–3.2 s single user, 0.3 q/s at 8 users). 
 request after model load took 35 s (CUDA warm-up) and is the "max" in `bench-gpu7b-*.json`;
 exclude it when quoting tails.
 
+### Bigger embedder and generator: Qwen3-Embedding-8B + Qwen2.5-14B (step-13 image, 2026-10-27)
+
+Same GPU configuration, the embedder swapped for Qwen3-Embedding-8B Q8_0 (4096-dim; the index
+was rebuilt, since the sealed snapshot's AAD carries the dimension) and the generator for
+Qwen2.5-14B-Instruct Q4_K_M. 21 GB of device memory. `EMBED_MODEL=8b CHAT_MODEL=14b` in
+`guest-llm-setup.sh`; the 0.6B, 1.5B and 7B files stay in the image.
+
+| | 7B + 0.6B zh | **14B + 8B zh** | 7B + 0.6B en | **14B + 8B en** |
+|---|---|---|---|---|
+| hit@4 | 1.00 | 1.00 | 1.00 | 0.99 |
+| answer accuracy | 0.99 | 0.99 | 0.975 | 0.975 |
+| held out: rejection | 0.35 | **0.20** | 0.35 | **0.55** |
+| held out: answered correctly from memory | 0.00 | 0.05 | 0.10 | 0.10 |
+| false rejection | 0.00 | 0.00 | 0.025 | 0.025 |
+| ask, k=4, p50 / p90 | 0.62 / 0.87 s | 1.19 / 1.69 s | 0.46 / 0.63 s | 0.81 / 1.12 s |
+| 8 users: q/s | 2.64 | 0.95 | 3.55 | 1.76 |
+| ingest throughput (GPU) | – | 7.9 chunks/s | – | 18.2 chunks/s |
+
+Doubling the generator does not buy what the 1.5B→7B step bought. Accuracy is flat (the
+corpus is already answered), retrieval was already saturated so the 8B embedder changes nothing
+(one English miss at hit@4 is within sampling noise), and negative rejection moves in opposite
+directions by language: up to 55 % in English, down to 20 % in Chinese, where the larger model
+answers more held-out questions from its own memory instead of declining. The cost is 2x the
+latency and a third of the throughput. The conclusion of the 7B round stands, stronger: the
+rejection gate has to be explicit (retrieval-score threshold or a verifier pass), not a bigger
+model. The session setup here (0.10 s) includes the NVIDIA manifest and OCSP checks, which the
+7B run did not enable.
+
 ### What confidential computing costs: the same pipeline in a plain VM (A1, 2026-10-23)
 
 Unprotected baseline: the identical step-11 image booted as an ordinary QEMU VM (no SEV-SNP,
@@ -270,6 +298,6 @@ python scripts/rag_bench.py --node http://127.0.0.1:8081 --policy ~/snp/policy-h
 ```
 
 Raw results: `bench-{zh,en}_refine.json`, `bench-*-sweep.json`, `bench-gpu-*.json` (GPU, 1.5B) and
-`bench-gpu7b-*.json` (GPU, 7B), `bench-plain7b-*.json` (plain VM baseline) and `bench-infonly7b-*.json` (inference-only TEE) on h200 in `~/snp`
+`bench-gpu7b-*.json` (GPU, 7B), `bench-plain7b-*.json` (plain VM baseline) and `bench-infonly7b-*.json` (inference-only TEE) and `bench-gpu14b-*.json` (8B embedder + 14B generator) on h200 in `~/snp`
 (per-question answers, hits, latencies). The RGB files are downloaded to
 `~/.cache/attestrag/rgb/` on first use.

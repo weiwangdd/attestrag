@@ -1,10 +1,10 @@
 {
-  "note": "Real SEV-SNP report from the h200 host (2x EPYC 9554 Genoa, SEV firmware 1.55 build 42), guest built by deploy/h200 (OVMF.amdsev 2025.11, kernel-hashes, dm-verity root, attestRAG 0.0.1 + HTTP transport in /opt/attestrag, llama.cpp b11753 + Qwen3-Embedding-0.6B + Qwen2.5-7B-Instruct Q4_K_M (1.5B kept) in /opt/llm, Qdrant 1.19.2 in /opt/qdrant, overlayroot=tmpfs:recurse=0, 32 vCPUs / 32 llama threads, chat -c 16384 -np 4, NVIDIA 580 open driver + llama.cpp CUDA build, nvidia-cc-ready unit, swiotlb=262144; captured 2026-10-26 from the step-12 image (GPU identity binding attestrag-rd-v2) with H200 NVL GPU3 passed through in CC mode). VCEK fetched from AMD KDS on 2026-10-20; ARK/ASK are the bundled AMD roots.",
+  "note": "Real SEV-SNP report from the h200 host (2x EPYC 9554 Genoa, SEV firmware 1.55 build 42), guest built by deploy/h200 (OVMF.amdsev 2025.11, kernel-hashes, dm-verity root, attestRAG 0.0.1 + HTTP transport in /opt/attestrag, llama.cpp b11753 + Qwen3-Embedding-8B Q8_0 + Qwen2.5-14B-Instruct Q4_K_M (0.6B embedder, 7B and 1.5B generators kept) in /opt/llm, Qdrant 1.19.2 in /opt/qdrant, overlayroot=tmpfs:recurse=0, 32 vCPUs / 32 llama threads, chat -c 16384 -np 4, NVIDIA 580 open driver + llama.cpp CUDA build, nvidia-cc-ready unit, swiotlb=262144; captured 2026-10-27 from the step-13 image (GPU identity binding attestrag-rd-v2, 8B embedder, 14B generator) with H200 NVL GPU3 passed through in CC mode). VCEK fetched from AMD KDS on 2026-10-20; ARK/ASK are the bundled AMD roots.",
   "host": "h200",
   "product": "Genoa",
   "report_version": 5,
-  "report_data": "04df955a13782fbf1d3c434146e9d3d1e2e9c0c6ea54b28012e2a463036727e6fa48d2e60f9cfcead2bae87e7c9dbae4",
-  "measurement": "7d72b266c994cc08f641e2ddf311106327da643b5e6a3e845a479e5a6933351f581fb382de249f2ba0eb4aab5c131d9c",
+  "report_data": "4128733de9335731f02be137d9dffbf040e32ceacfdb97102858ecfc2fcef2f58ac20eb8ab739a9b5b9ff6d2e23bf6f8",
+  "measurement": "e79c7dd09e5cf0d7794630ad9a0a1d40bfcd3fbc07db5227c34823ddeb9362670369d63c5c64164f99b287e1ebbddf1b",
   "tcb": {
     "bootloader": 10,
     "tee": 0,

@@ -1,8 +1,8 @@
 {
-  "label": "attestrag-h200-composite-v10-2026-10-26",
-  "report_data": "7729b5528e5bafeee673e863552376f310b7892aedc91eaec1fc594daa007ec75fe823ea722d2bd7ca76fbaa80f9855a",
-  "gpu_report_data": "962c2c9cafb5f6f91e1cfded4dcfe98745325372ba2d9e5677126082a8eca5d5362aea80290d03565f60a8599fd1a5fb",
-  "snp_measurement": "7d72b266c994cc08f641e2ddf311106327da643b5e6a3e845a479e5a6933351f581fb382de249f2ba0eb4aab5c131d9c",
+  "label": "attestrag-h200-composite-v11-2026-10-27",
+  "report_data": "c1d3c79717617a59886a588c8c967c92cd34333b013b5d113d942bcd7fe394451e099472000d00429822d619857426be",
+  "gpu_report_data": "f99a59f77be655864cef46c56e12f073330673e8e5f2105b13880273efa5c9fd851ecd3acb434befb7cbf648ff178129",
+  "snp_measurement": "e79c7dd09e5cf0d7794630ad9a0a1d40bfcd3fbc07db5227c34823ddeb9362670369d63c5c64164f99b287e1ebbddf1b",
   "note": "bound pair captured inside the SEV-SNP guest on h200 with H200 NVL GPU3 in CC mode (step-10 image, driver 580.178.04): SNP report through configfs-tsm over report_data || 16 zero bytes, GPU SPDM transcript through NVML over the first 32 bytes of gpu_report_data(report_data); the GPU half is bound to the CPU half exactly as the node does it.",
   "verify_at": 1792836357,
   "ocsp_note": "verify_at sits inside the validity window of the cached NVIDIA OCSP responses in tests/fixtures/nvidia/h200/ocsp (2026-10-23 22:05 -> 2026-10-24 22:05 UTC); same GPU, same certificates"
