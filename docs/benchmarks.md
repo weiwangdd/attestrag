@@ -205,6 +205,34 @@ rejection gate has to be explicit (retrieval-score threshold or a verifier pass)
 model. The session setup here (0.10 s) includes the NVIDIA manifest and OCSP checks, which the
 7B run did not enable.
 
+### Mixture of experts: Qwen3-Next-80B-A3B-Instruct (step-14 image, 2026-10-27)
+
+Same 8B embedder and index, generator swapped for Qwen3-Next-80B-A3B-Instruct Q4_K_M (48 GB,
+3B active parameters per token; `CHAT_MODEL=80b`). The hope was large-model quality at
+small-model latency. 57 GB of device memory.
+
+| | 7B zh | 14B zh | **80B-A3B zh** | 7B en | 14B en | **80B-A3B en** |
+|---|---|---|---|---|---|---|
+| hit@4 | 1.00 | 1.00 | 0.96 | 1.00 | 0.99 | 0.99 |
+| answer accuracy | 0.99 | 0.99 | 0.94 | 0.975 | 0.975 | 0.99 |
+| held out: rejection | 0.35 | 0.20 | 0.25 | 0.35 | 0.55 | 0.55 |
+| held out: answered correctly from memory | 0.00 | 0.05 | **0.40** | 0.10 | 0.10 | 0.20 |
+| false rejection | 0.00 | 0.00 | 0.0125 | 0.025 | 0.025 | 0.0125 |
+| ask p50 / p90 | 0.62 / 0.87 s | 1.19 / 1.69 s | 1.71 / 2.65 s | 0.46 / 0.63 s | 0.81 / 1.12 s | 1.32 / 1.63 s |
+| 8 users q/s | 2.64 | 0.95 | 0.66 | 3.55 | 1.76 | 1.00 |
+
+It did not deliver. Latency is *worse* than the dense 14B, not better: in llama.cpp b11753 the
+hybrid gated-DeltaNet layers and the expert routing run through young CUDA kernels, and every
+token touches experts spread over 48 GB, so the decode is memory-bound regardless of the 3B
+active count; under eight users the throughput is a quarter of the 7B's. Quality does not
+move the way one would want either: English accuracy nudges to 0.99, Chinese drops to 0.94,
+rejection is no better than 14B, and the model answers 40 % of the Chinese held-out questions
+correctly from its own memory, the opposite of what a RAG gate wants. (Retrieval, which the
+generator cannot influence, moved by three Chinese questions between the 14B and 80B runs on
+the same index; that bounds the sampling noise of all these rows.) The 7B configuration
+remains the one to deploy: same quality, a third of the latency, and a bigger model only makes
+the rejection problem harder to see because it knows the answers anyway.
+
 ### What confidential computing costs: the same pipeline in a plain VM (A1, 2026-10-23)
 
 Unprotected baseline: the identical step-11 image booted as an ordinary QEMU VM (no SEV-SNP,
@@ -239,6 +267,42 @@ a normal-mode GPU to the SEV-SNP VM: the NVIDIA driver refuses
 (`confComputeConstructEngine: GPU confidential compute capability is not enabled … Cannot
 attach gpu`), so inside a CVM the GPU must be in CC mode. The two halves (CVM, CC GPU) are
 only separable with a plain VM plus a CC-mode GPU, which NVIDIA does not support either.
+
+### Does the confidential-computing overhead grow with the model? (2026-10-27)
+
+Four generators, each measured twice on the same step-14 image: inside the SEV-SNP VM with the
+GPU in CC mode (production), and in a plain VM with the GPU in normal mode (mock attestation). The
+chat model is switched in the tmpfs overlay, so software, embedder (8B), index and questions are
+identical across the eight runs; only the generator and the protection differ
+(`deploy/h200/scale-experiment.sh`). Two measurements per cell: a token microbenchmark against
+llama-server itself (one ~2.3k-token prompt, 128 generated tokens, prompt cache off, 8 requests,
+llama-server's own timings; `scale-bench.py`) and RGB end to end through the attested client.
+
+| generator | prefill tok/s CVM / plain | decode tok/s CVM / plain | ask p50 en CVM / plain | ask p50 zh CVM / plain | 8 users q/s en CVM / plain | zh |
+|---|---|---|---|---|---|---|
+| Qwen2.5-1.5B | 21.6k / 25.2k (**0.86x**) | 360 / 453 (**0.80x**) | 0.17 / 0.13 s (**+30 %**) | 0.25 / 0.19 s (+28 %) | 8.1 / 11.4 (−29 %) | 6.0 / 8.9 (−32 %) |
+| Qwen2.5-7B | 7.9k / 8.8k (0.90x) | 196 / 220 (0.89x) | 0.45 / 0.39 s (+13 %) | 0.63 / 0.55 s (+15 %) | 3.3 / 4.0 (−17 %) | 2.7 / 3.3 (−18 %) |
+| Qwen2.5-14B | 4.1k / 4.3k (0.94x) | 112 / 120 (0.93x) | 0.81 / 0.74 s (+11 %) | 1.19 / 1.03 s (+15 %) | 1.4 / 1.7 (−16 %) | 1.2 / 1.5 (−20 %) |
+| Qwen3-Next-80B-A3B | 3.3k / 3.6k (0.91x) | 153 / 174 (0.88x) | 1.34 / 1.14 s (+17 %) | 1.72 / 1.53 s (+13 %) | 0.65 / 0.89 (−27 %) | 0.73 / 0.96 (−24 %) |
+
+The relative cost of confidential computing *falls* as the model grows: 20–30 % for the 1.5B
+model, 11–15 % for 7B and 14B. The mechanism is visible in the microbenchmark. The CC mode's
+cost is per submission (every kernel launch and every DMA crosses the encrypted driver–GPU
+channel, every transfer goes through bounce buffers), not per FLOP; a bigger dense model does
+more work per launch and amortises it. Prefill, which is a few large batched kernels, loses
+6–14 %; decode, which is one small kernel sequence per token, loses 7–20 %, and the smallest
+model loses most because its kernels are the shortest. In absolute terms the overhead per answer
+grows slowly (about 40 ms at 1.5B, 60 ms at 7B, 70–160 ms at 14B, 200 ms at 80B) while the
+answer itself grows faster. The mixture of experts breaks the trend slightly: its decode
+runs the expert routing as many small kernels per token, so at 80B the overhead is back to
+12–17 %, between the 1.5B and the 7B. Under eight users the throughput gap follows the same
+shape (29–32 % at 1.5B, 16–20 % at 7B/14B, 24–27 % for the MoE).
+
+So for the deployment question, the answer is the comfortable one: the larger the model one
+can afford, the smaller the fraction confidential computing takes, and for the models anyone
+would deploy for RAG (7B and up) it is 10–17 % of latency at one user and 16–20 % of
+throughput at eight. Raw results: `scale-{cvm,plain}-<model>.json` and
+`bench-scale-{cvm,plain}-<model>-<ds>.json` on h200 in `~/snp`.
 
 ### Inference-only TEE: protecting just the model call (2026-10-26)
 
@@ -298,6 +362,6 @@ python scripts/rag_bench.py --node http://127.0.0.1:8081 --policy ~/snp/policy-h
 ```
 
 Raw results: `bench-{zh,en}_refine.json`, `bench-*-sweep.json`, `bench-gpu-*.json` (GPU, 1.5B) and
-`bench-gpu7b-*.json` (GPU, 7B), `bench-plain7b-*.json` (plain VM baseline) and `bench-infonly7b-*.json` (inference-only TEE) and `bench-gpu14b-*.json` (8B embedder + 14B generator) on h200 in `~/snp`
+`bench-gpu7b-*.json` (GPU, 7B), `bench-plain7b-*.json` (plain VM baseline) and `bench-infonly7b-*.json` (inference-only TEE) `bench-gpu14b-*.json` (8B embedder + 14B generator) and `bench-gpu80b-*.json` (80B-A3B) on h200 in `~/snp`
 (per-question answers, hits, latencies). The RGB files are downloaded to
 `~/.cache/attestrag/rgb/` on first use.
