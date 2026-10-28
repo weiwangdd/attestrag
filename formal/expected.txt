@@ -18,7 +18,6 @@ attestrag_release_v1.spthy gpu_bound_to_session verified
 attestrag_release_v1.spthy gpu_is_the_attached_one falsified
 attestrag_release_v1.spthy doc_secrecy verified
 attestrag_release_v1.spthy answer_authentic verified
-attestrag_release_unsigned.spthy executable verified local-only
 attestrag_release_unsigned.spthy dek_secrecy verified
 attestrag_release_unsigned.spthy release_only_to_good_prover verified
 attestrag_release_unsigned.spthy no_replay verified

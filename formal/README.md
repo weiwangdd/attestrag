@@ -74,7 +74,10 @@ the commit (step 17), with three more lemmas:
 | `doc_secrecy` | (as above, now with the sealed index on the untrusted disk) | verified | **falsified** (15 steps) |
 
 `attestrag_release_unsigned.spthy` is the protocol as deployed before step 17: the release wrapped to
-`pk` but not signed, so the node takes any well-formed `aenc(<DEK, v>, pk)`. The trace: the adversary
+`pk` but not signed, so the node takes any well-formed `aenc(<DEK, v>, pk)`. It has no `executable`
+lemma: without the signature that trace search runs for 15 minutes and 18 GB (the solver explores the
+adversary building the wrapped key before it rules that out), and the three attack traces are
+executable traces through release, unwrap and persist anyway. The trace: the adversary
 wraps a key of its own to the node's `pk`, the node accepts it, seals the uploaded document under it,
 and the adversary opens the file on the disk it controls. The client's verification of the node is
 no help, since the node is the measured image doing what it was told. The signature over

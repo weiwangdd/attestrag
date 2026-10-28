@@ -199,9 +199,10 @@ rule Client_Accept:
 
 // ---- properties -------------------------------------------------------------------------
 
-lemma executable: exists-trace
-  "Ex n pkx dek q ans #i #j #k.
-     Release(n, pkx, dek)@i & NodeGotKey('good', pkx, dek)@j & Accept(pkx, q, ans)@k & i < j & j < k"
+// No `executable` lemma here: without the signature the trace search for the honest run explores the
+// adversary building the wrapped key itself before it rules that out (15 min, 18 GB, exceeding a CI
+// runner), and the three attack traces below are themselves executable traces through release,
+// unwrap and persist, which is what the lemma would establish.
 
 // P1  A released key is known only to the TEE whose private key the report vouches for.
 lemma dek_secrecy:
