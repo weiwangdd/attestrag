@@ -60,6 +60,10 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--gpu", action="append", default=[], metavar="INDEX|auto",
                     help="NVML index of a confidential-computing GPU whose attestation is bound into every report "
                          "(repeatable); 'auto' = every GPU that can produce an attestation report, none if there is no GPU")
+    ap.add_argument("--min-score", type=float, default=0.0,
+                    help="relevance gate: refuse (without calling the generator) when the best chunk scores below this; 0 = off")
+    ap.add_argument("--judge", action="store_true",
+                    help="relevance gate, stage 2: ask the generator YES/NO whether the context contains the answer before answering")
     ap.add_argument("--attester", choices=["snp", "mock-insecure"], default="snp",
                     help="mock-insecure: NO attestation (public mock vendor), for the unprotected baseline in a plain VM only")
     args = ap.parse_args(argv)
@@ -89,7 +93,9 @@ def main(argv: list[str] | None = None) -> None:
         print(f"[node] vector store=QdrantStore url={args.qdrant_url} collection={args.qdrant_collection}",
               file=sys.stderr, flush=True)
     node = AttestRAGNode(attester, KBSClient(HttpKBS(args.kbs), attester), emb,
-                         gen, args.data_dir, index_key_id=args.key_id, store=store)
+                         gen, args.data_dir, index_key_id=args.key_id, store=store, min_score=args.min_score, judge=args.judge)
+    if args.min_score > 0 or args.judge:
+        print(f"[node] relevance gate: min_score={args.min_score} judge={args.judge}", file=sys.stderr, flush=True)
     try:
         node.start()
     except KeyReleaseDenied as e:

@@ -108,12 +108,17 @@ RestartSec=5
 WantedBy=multi-user.target
 UNIT
 
+# relevance gate (GATE=judge, default): the node asks the generator YES/NO whether the retrieved context states
+# the fact before it answers; GATE=none leaves it off. Part of node.env, hence of the measurement.
+GATE=${GATE:-judge}
 # keep an existing node.env: guest-qdrant-setup.sh prefixes NODE_ARGS and a re-run must not undo that
 [ -f /etc/attestrag/node.env ] || cat > /etc/attestrag/node.env <<ENV
 KBS_URL=$KBS_URL
 DATA_DIR=/var/lib/attestrag
 NODE_ARGS=--embed http://127.0.0.1:8090/v1 --llm http://127.0.0.1:8091/v1 --model chat --embed-model embed
 ENV
+if [ "$GATE" = judge ]; then grep -q -- '--judge' /etc/attestrag/node.env || sed -i 's|^NODE_ARGS=|NODE_ARGS=--judge |' /etc/attestrag/node.env
+else sed -i 's|--judge ||' /etc/attestrag/node.env; fi
 cat /etc/attestrag/node.env
 
 cat > /etc/systemd/system/attestrag-node.service <<UNIT

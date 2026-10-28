@@ -166,6 +166,7 @@ def ask_one(client: AttestRAGClient, row: dict, k: int, held_out: bool) -> dict:
         "positive_hits": sum(hits), "k": len(hits),
         "correct": answer_ok(row["answer"], text), "rejected": bool(REJECT_RE.search(text)),
         "cited": len(res["answer"]["citations"]), "answer": text[:400],
+        "top_score": res["hits"][0]["score"] if res["hits"] else None, "gate": res.get("gate"),
     }
 
 

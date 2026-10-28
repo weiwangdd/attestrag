@@ -67,3 +67,35 @@ def test_untrusted_node_gets_no_key_and_no_data(tmp_path, kbs, make_attester, ve
         client.connect()
     with pytest.raises(NodeUntrusted):
         client.upload("x", b"secret")  # SDK refuses before any bytes leave the client
+
+
+def test_relevance_gate_refuses_without_calling_the_generator(tmp_path, kbs, make_attester, verifier, policy):
+    from attestrag.node import GATE_TEXT
+    node = AttestRAGNode(make_attester(), KBSClient(kbs, make_attester()), HashingEmbedder(256), StubGenerator(),
+                         tmp_path / "data", min_score=0.5)
+    node.start()
+    client = AttestRAGClient(node, verifier, policy)
+    client.connect()
+    for doc_id, data in DOCS.items():
+        client.upload(doc_id, data)
+    on_topic = client.ask("The VCEK signs attestation reports and is derived from the chip's TCB version.", k=2)
+    assert on_topic["gate"]["rejected"] is False and on_topic["gate"]["top_score"] >= 0.5 and "VCEK" in on_topic["answer"]["text"]
+    off_topic = client.ask("Quarterly revenue of a bicycle manufacturer in Lisbon", k=2)
+    assert off_topic["gate"]["rejected"] is True and off_topic["gate"]["top_score"] < 0.5
+    assert off_topic["answer"]["text"] == GATE_TEXT and off_topic["answer"]["model"] == "gate" and off_topic["answer"]["citations"] == []
+    assert len(off_topic["hits"]) == 2      # the retrieval result is still reported, the generator is not called
+
+
+def test_judge_gate_with_the_stub(tmp_path, kbs, make_attester, verifier, policy):
+    from attestrag.node import GATE_TEXT
+    node = AttestRAGNode(make_attester(), KBSClient(kbs, make_attester()), HashingEmbedder(256), StubGenerator(),
+                         tmp_path / "data", judge=True)
+    node.start()
+    client = AttestRAGClient(node, verifier, policy)
+    client.connect()
+    for doc_id, data in DOCS.items():
+        client.upload(doc_id, data)
+    ok = client.ask("Which key signs attestation reports?", k=2)        # "attestation" and "reports" are in the chunk
+    assert ok["gate"]["rejected"] is False and ok["gate"]["judge"] is True
+    no = client.ask("What is the capital of Portugal?", k=2)
+    assert no["gate"] == {**no["gate"], "rejected": True, "reason": "judge"} and no["answer"]["text"] == GATE_TEXT

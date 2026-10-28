@@ -26,6 +26,20 @@ def build_prompt(question: str, hits: list[Hit]) -> str:
     return f"Context:\n{ctx}\n\nQuestion: {question}"
 
 
+# The judge shares the system prompt and the whole context/question prefix with the answer prompt and only
+# appends its instruction, so the inference server's prompt cache serves the second call from the first:
+# the judge then costs a few tokens of prefill, not a second pass over the context.
+JUDGE_SUFFIX = (
+    "\n\nBefore answering: does the context above explicitly state the specific fact the question asks for? "
+    "Being on the same topic is not enough; if the exact fact is missing or you are unsure, the answer is NO. "
+    "Reply with exactly one word, YES or NO."
+)
+
+
+def build_judge_prompt(question: str, hits: list[Hit]) -> str:
+    return build_prompt(question, hits) + JUDGE_SUFFIX
+
+
 @dataclass(frozen=True)
 class Answer:
     text: str
@@ -36,6 +50,10 @@ class Answer:
 class Generator(Protocol):
     def generate(self, question: str, hits: list[Hit]) -> Answer: ...
 
+    def judge(self, question: str, hits: list[Hit]) -> bool:
+        """True when the context is judged sufficient to answer; the relevance gate's second stage."""
+        ...
+
 
 class StubGenerator:
     """Extractive 'generator': returns the best chunk's text. Deterministic, offline."""
@@ -45,6 +63,11 @@ class StubGenerator:
             return Answer("I don't know (no relevant context).", (), "stub")
         best = hits[0]
         return Answer(f"{best.text} [{best.chunk_id}]", (best.chunk_id,), "stub")
+
+    def judge(self, question: str, hits: list[Hit]) -> bool:
+        """Offline stand-in: sufficient when the best chunk shares a word of 5+ letters with the question."""
+        words = {w.lower().strip(".,?!") for w in question.split() if len(w) >= 5}
+        return bool(hits) and any(w in hits[0].text.lower() for w in words)
 
 
 class OpenAICompatibleGenerator:
@@ -75,3 +98,25 @@ class OpenAICompatibleGenerator:
         text = data["choices"][0]["message"]["content"]
         cited = tuple(h.chunk_id for h in hits if f"[{h.chunk_id}]" in text)
         return Answer(text, cited, data.get("model", self.model))
+
+    def judge(self, question: str, hits: list[Hit]) -> bool:
+        """One short completion at temperature 0; anything that does not start with YES is a refusal."""
+        if not hits:
+            return False
+        body = json.dumps({
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": build_judge_prompt(question, hits)},
+            ],
+            "max_tokens": 3,
+            "temperature": 0,
+        }).encode()
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        req = urllib.request.Request(f"{self.base_url}/chat/completions", body, headers)
+        with urllib.request.urlopen(req, timeout=self.timeout) as r:
+            data = json.load(r)
+        verdict = data["choices"][0]["message"]["content"].strip().upper()
+        return verdict.startswith("YES")

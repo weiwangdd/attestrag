@@ -115,6 +115,39 @@ What to change next, in order of expected effect:
 3. GPU CC (step 4 of the plan): prompt processing at 700 tok/s is the whole budget;
    an H200 in CC mode does the same in milliseconds.
 
+### Relevance gate: refusing when the corpus has no answer (step-16 image, 2026-10-28)
+
+Every model round left the same weak spot: when the answer is not in the corpus the generator
+answers anyway (rejection 35 % at best with 7B, worse with bigger models that know the news).
+Two gates were tried on the 7B + 0.6B configuration (`scripts/gate_calibrate.py`,
+`bench-gate0-*.json`, `bench-judge*-*.json`):
+
+1. **Score gate** (`--min-score`): refuse when the best retrieved chunk's cosine score is below a
+   threshold. It does not separate: held-out questions score 0.57–0.78 and answerable ones
+   0.57–0.87, because RGB's held-out questions have same-topic negative passages and embedding
+   similarity measures topic, not answer presence. At ≤ 2 % false rejection it refuses 5–10 %.
+2. **Judge gate** (`--judge`, the default from step 16): before answering, the generator is asked
+   with the *same* system prompt, context and question plus one trailing instruction whether the
+   context explicitly states the fact the question asks for, YES or NO; NO refuses without
+   generating. Because the prompt shares its prefix with the answer prompt, llama-server's prompt
+   cache serves the second call: the judge costs a few tokens of prefill, not a second pass.
+
+| 7B + 0.6B, GPU | no gate | judge, lenient wording | **judge, strict wording (default)** |
+|---|---|---|---|
+| zh: held-out rejection / false rejection | 0.35 / 0.00 | 0.60 / 0.013 | **0.85 / 0.038** |
+| en: held-out rejection / false rejection | 0.35 / 0.025 | 0.75 / 0.038 | **0.85 / 0.038** |
+| held out: answered correctly from memory (zh / en) | 0.00 / 0.10 | 0.00 / 0.05 | 0.00 / 0.05 |
+| answer accuracy (zh / en) | 0.99 / 0.975 | 0.99 / 0.96 | 0.96 / 0.95 |
+| ask p50 (zh / en) | 0.62 / 0.46 s | 0.60 / 0.42 s | 0.60 / 0.41 s |
+| 8 users q/s (zh / en) | 2.64 / 3.55 | 3.43 / 3.94 | 3.15 / 4.16 |
+
+The strict judge refuses 85 % of the questions the corpus cannot answer, in both languages, at
+3.75 % false rejection (3 of 80 answerable questions), with no latency cost (refused questions skip
+generation, so throughput even rises). The first judge wording, with its own system prompt, reached
+75–80 % but cost a second prefill (zh p50 0.91 s); sharing the prefix removed that. Accuracy drops
+by the false rejections, which count as wrong. The remaining 15 % that pass the judge are mostly
+answered from the model's memory or with the wrong fact, the residue a 7B judge cannot see.
+
 ### GPU confidential computing (step 4, measured 2026-10-23)
 
 Same image family, same corpus already sealed on the data disk (`--skip-ingest`), same
@@ -362,6 +395,6 @@ python scripts/rag_bench.py --node http://127.0.0.1:8081 --policy ~/snp/policy-h
 ```
 
 Raw results: `bench-{zh,en}_refine.json`, `bench-*-sweep.json`, `bench-gpu-*.json` (GPU, 1.5B) and
-`bench-gpu7b-*.json` (GPU, 7B), `bench-plain7b-*.json` (plain VM baseline) and `bench-infonly7b-*.json` (inference-only TEE) `bench-gpu14b-*.json` (8B embedder + 14B generator) and `bench-gpu80b-*.json` (80B-A3B) on h200 in `~/snp`
+`bench-gpu7b-*.json` (GPU, 7B), `bench-plain7b-*.json` (plain VM baseline) and `bench-infonly7b-*.json` (inference-only TEE) `bench-gpu14b-*.json` (8B embedder + 14B generator), `bench-gpu80b-*.json` (80B-A3B), `bench-gate0-*.json` and `bench-judge{,2,3}-*.json` (relevance gate) on h200 in `~/snp`
 (per-question answers, hits, latencies). The RGB files are downloaded to
 `~/.cache/attestrag/rgb/` on first use.

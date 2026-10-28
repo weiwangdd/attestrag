@@ -20,7 +20,7 @@ from .attest.base import CompositeAttester
 from .attest.types import CompositeEvidence
 from .common.crypto import WrappedKey, seal, unwrap, x25519_public_bytes
 from .embed import Embedder
-from .generate import Generator
+from .generate import Answer, Generator
 from .index import EncryptedVectorIndex, VectorStore
 from .ingest import chunk_text, parse
 from .kbs_client import KBSClient
@@ -29,6 +29,10 @@ from .retrieve import Retriever
 INGEST_INFO = b"attestrag-ingest-v1|"
 QUERY_INFO = b"attestrag-query-v1"
 ANSWER_INFO = b"attestrag-answer-v1"
+
+
+GATE_TEXT = ("The retrieved context is insufficient to answer this question: no relevant passage was found. "
+             "检索到的上下文不足以回答该问题，语料中没有相关依据，无法作答。")
 
 
 class AttestRAGNode:
@@ -41,7 +45,17 @@ class AttestRAGNode:
         data_dir: str | Path,
         index_key_id: str = "index-dek",
         store: VectorStore | None = None,
+        min_score: float = 0.0,
+        judge: bool = False,
     ):
+        # relevance gate, two stages, both part of the measured node configuration (node.env):
+        #  1. score: the best retrieved chunk must score at least min_score (0 = off; cheap, but embedding
+        #     similarity measures topic, not answer presence, see scripts/gate_calibrate.py);
+        #  2. judge: the generator answers YES/NO to "does the context contain the answer" before it is
+        #     asked to answer (one short completion; the verifier pass).
+        # A refused question gets GATE_TEXT and the generator is never asked for an answer.
+        self.min_score = float(min_score)
+        self.judge = bool(judge)
         self.attester = attester
         self.kbs = kbs
         self.embedder = embedder
@@ -93,8 +107,16 @@ class AttestRAGNode:
         req = json.loads(unwrap(self._transport, wrapped_question, info=QUERY_INFO))
         question, reply_key = req["question"], bytes.fromhex(req["reply_key"])
         hits = Retriever(self.embedder, index).retrieve(question, k)
-        answer = self.generator.generate(question, hits)
-        payload = json.dumps({"answer": asdict(answer), "hits": [asdict(h) for h in hits]}).encode()
+        top = hits[0].score if hits else 0.0
+        why = None
+        if self.min_score > 0 and top < self.min_score:
+            why = "score"
+        elif self.judge and not self.generator.judge(question, hits):
+            why = "judge"
+        answer = Answer(GATE_TEXT, (), "gate") if why else self.generator.generate(question, hits)
+        payload = json.dumps({"answer": asdict(answer), "hits": [asdict(h) for h in hits],
+                              "gate": {"min_score": self.min_score, "judge": self.judge, "top_score": top,
+                                       "rejected": why is not None, "reason": why}}).encode()
         return seal(reply_key, payload, aad=ANSWER_INFO)
 
 

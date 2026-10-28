@@ -1,5 +1,5 @@
 ac27e626b097cf6f9eae09b79fc87fc2d3fb6e99c8d97b27f0603993c06a28bb  /home/weiwang/snp/ovmf/2025.11-3ubuntu7.3/usr/share/ovmf/OVMF.amdsev.fd
 41ba36d860aa0b0cd995f4ca8856d80249b244577e704929b55be13fbd1ebd2f  /home/weiwang/snp/images/vmlinuz
 f2ee15efad942ef7b5b330225a4602cf574ba594a06fa8fbe2e71cf3ec276bc0  /home/weiwang/snp/images/initrd.verity.img
-265c57d4b92a9000dbd1fe60ea04b455b3edcbe320f0620193f71932d9fda6a2  rootfs.raw
-0a9a72fe9e9ddd798e70928724bf6b2b3d166cdbd7f412d2c71d9834400e54b3  rootfs.hash
+14e79d6de5f040e57f21decffa867ec34cdfd54d75f288587273a14d1a921992  rootfs.raw
+b3fdd88c8bc752f3d2c1a87decbe0712d3ce954a4cd70df9967b8b0eb4b29d11  rootfs.hash
