@@ -1,3 +1,5 @@
+[![ci](https://github.com/weiwangdd/attestrag/actions/workflows/ci.yml/badge.svg)](https://github.com/weiwangdd/attestrag/actions/workflows/ci.yml)
+
 # AttestRAG
 
 Open-source, end-to-end **attestable RAG** that you deploy into your own cloud

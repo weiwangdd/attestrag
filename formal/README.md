@@ -10,6 +10,8 @@ Tamarin models of the protocol that `attestrag/kbs_client/reference_kbs.py`, `at
 `attestrag/common/crypto.py`, `attestrag/node.py` and `attestrag/sdk` implement. Run with
 `formal/prove.sh` (tamarin-prover 1.12, maude 3.5.1; every lemma in its own process with
 `--auto-sources`, 75 s wall on 32 cores for both theories).
+`formal/check.sh` does the same and compares every verdict with `formal/expected.txt` (exit 1 on any
+mismatch; the one expected `falsified` is the attack on the first binding). CI runs it on every push.
 
 ## What is modelled
 

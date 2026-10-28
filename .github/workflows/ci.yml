@@ -1,0 +1,72 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    name: pytest (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install -e ".[dev,nvidia]"
+      - run: python -m pytest -q
+        # Qdrant tests skip without QDRANT_BIN; the Lean differential test skips without the binary (see the lean job)
+
+  tamarin:
+    name: Tamarin (formal/check.sh)
+    runs-on: ubuntu-latest
+    env:
+      TAMARIN_VERSION: 1.12.0
+      MAUDE_VERSION: 3.5.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tamarin-prover and Maude
+        run: |
+          set -e
+          mkdir -p "$HOME/tools" && cd "$HOME/tools"
+          curl -sSL -o tamarin.tar.gz "https://github.com/tamarin-prover/tamarin-prover/releases/download/${TAMARIN_VERSION}/tamarin-prover-${TAMARIN_VERSION}-linux64-ubuntu.tar.gz"
+          curl -sSL -o maude.zip "https://github.com/maude-lang/Maude/releases/download/Maude${MAUDE_VERSION}/Maude-${MAUDE_VERSION}-linux-x86_64.zip"
+          mkdir -p tamarin maude && tar xzf tamarin.tar.gz -C tamarin && (cd maude && unzip -q maude.zip)
+          chmod +x tamarin/tamarin-prover maude/maude
+          echo "$HOME/tools/tamarin" >> "$GITHUB_PATH"; echo "$HOME/tools/maude" >> "$GITHUB_PATH"
+          echo "MAUDE_LIB=$HOME/tools/maude" >> "$GITHUB_ENV"
+      - run: tamarin-prover --version | head -1
+      - name: Prove every lemma and compare with formal/expected.txt
+        run: JOBS=2 TIMEOUT=1500 bash formal/check.sh
+
+  lean:
+    name: Lean spec + differential test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Cache elan and the Lake build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            formal/lean/.lake
+          key: lean-${{ hashFiles('formal/lean/lean-toolchain', 'formal/lean/lakefile.toml') }}
+      - name: Install elan
+        run: |
+          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Build the specification and its theorems
+        working-directory: formal/lean
+        run: lake build AttestRAG attestrag_policy
+      - run: pip install -e ".[dev]"
+      - name: Differential test against the Python engine
+        run: python -m pytest -q tests/test_lean_policy.py -p no:cacheprovider
