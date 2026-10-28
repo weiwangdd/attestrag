@@ -27,8 +27,12 @@ jobs:
         # Qdrant tests skip without QDRANT_BIN; the Lean differential test skips without the binary (see the lean job)
 
   tamarin:
-    name: Tamarin (formal/check.sh)
+    name: Tamarin (${{ matrix.theory }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:   # one theory per runner, lemmas in sequence: two provers at once exhausted a runner's memory
+        theory: [attestrag_release.spthy, attestrag_release_v1.spthy, attestrag_release_unsigned.spthy]
     env:
       TAMARIN_VERSION: 1.12.0
       MAUDE_VERSION: 3.5.1
@@ -45,8 +49,8 @@ jobs:
           echo "$HOME/tools/tamarin" >> "$GITHUB_PATH"; echo "$HOME/tools/maude" >> "$GITHUB_PATH"
           echo "MAUDE_LIB=$HOME/tools/maude" >> "$GITHUB_ENV"
       - run: tamarin-prover --version | head -1
-      - name: Prove every lemma and compare with formal/expected.txt
-        run: JOBS=2 TIMEOUT=1500 bash formal/check.sh
+      - name: Prove every lemma of the theory and compare with formal/expected.txt
+        run: ONLY=${{ matrix.theory }} JOBS=1 TIMEOUT=1500 bash formal/check.sh
 
   lean:
     name: Lean spec + differential test
