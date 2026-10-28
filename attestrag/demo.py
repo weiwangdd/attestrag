@@ -16,6 +16,7 @@ import json
 import os
 import sys
 import tempfile
+from pathlib import Path
 
 from .attest import CompositeAttester, CompositeVerifier, Platform
 from .common.crypto import new_key
@@ -67,14 +68,35 @@ def mock_main() -> None:
     run_flow(attester, CompositeVerifier({Platform.MOCK_CPU: mv, Platform.MOCK_GPU: mv}), policy)
 
 
+def _tsm_provider() -> str:
+    """configfs-tsm names the TEE: 'sev_guest' or 'tdx_guest' (a throw-away entry, removed again)."""
+    import tempfile
+    root = Path("/sys/kernel/config/tsm/report")
+    entry = root / f"probe-{os.getpid()}"
+    try:
+        entry.mkdir()
+        return (entry / "provider").read_text().strip()
+    except OSError:
+        return ""
+    finally:
+        try:
+            entry.rmdir()
+        except OSError:
+            pass
+
+
 def snp_main(policy_path: str | None, product: str | None, gpu: list[str] | None = None) -> None:
     from .attest.nvidia import NvidiaAttester, NvidiaVerifier, gpu_indices
     from .attest.snp import SnpAttester, SnpVerifier
 
     gpus = gpu_indices(gpu or [])
     print(f"GPU attesters: {gpus or 'none'}", file=sys.stderr)
-    attester = CompositeAttester(SnpAttester(), [NvidiaAttester(i) for i in gpus])
-    verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(product=product), Platform.NVIDIA_CC: NvidiaVerifier()})
+    from .attest.tdx import TdxAttester
+    cpu = TdxAttester() if (Path("/sys/kernel/config/tsm/report").is_dir() and _tsm_provider() == "tdx_guest") else SnpAttester()
+    attester = CompositeAttester(cpu, [NvidiaAttester(i) for i in gpus])
+    from .attest.tdx import TdxVerifier
+    verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(product=product), Platform.TDX: TdxVerifier(),
+                                  Platform.NVIDIA_CC: NvidiaVerifier()})
     if policy_path:
         with open(policy_path) as f:
             policy = Policy.from_json(f.read())
@@ -84,7 +106,7 @@ def snp_main(policy_path: str | None, product: str | None, gpu: list[str] | None
         probe = claims.cpu
         print("WARNING: no --policy given; trusting observed measurement/TCB (TOFU).", file=sys.stderr)
         observed = {
-            "allowed_cpu_platforms": ["sev-snp"],
+            "allowed_cpu_platforms": [probe.platform.value],
             "allowed_measurements": [probe.measurement],
             "min_tcb": probe.tcb,
         }

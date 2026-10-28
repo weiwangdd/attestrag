@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from .attest import CompositeVerifier, Platform
 from .attest.snp import KdsClient, SnpVerifier
 from .attest.nvidia import NvidiaVerifier
+from .attest.tdx import PcsClient, TdxVerifier
 from .common.crypto import new_key
 from .kbs_client import KeyRecord, ReferenceKBS, kbs_routes
 from .kbs_client.reference_kbs import identity_public_bytes
@@ -103,6 +104,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--print-pubkey", action="store_true", help="print the KBS identity public key (hex) and exit")
     ap.add_argument("--product", choices=["Milan", "Genoa", "Turin"])
     ap.add_argument("--kds-cache", help="VCEK cache dir (default ~/.cache/attestrag/kds)")
+    ap.add_argument("--pcs-cache", help="Intel PCS cache dir for TDX TCB info / QE identity (default ~/.cache/attestrag/pcs)")
     ap.add_argument("--nonce-ttl", type=float, default=60.0)
     ap.add_argument("--gpu-rim", action="store_true",
                     help="also check GPU evidence against NVIDIA's reference manifests (RIM service) and OCSP; cached in --nvidia-cache")
@@ -137,6 +139,7 @@ def main(argv: list[str] | None = None) -> None:
 
     policy = Policy.from_json(Path(args.policy).read_text())
     verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product),
+                                   Platform.TDX: TdxVerifier(PcsClient(args.pcs_cache)),
                                    Platform.NVIDIA_CC: nvidia_verifier(args)})
     if args.insecure_mock:
         from .attest.mock import insecure_baseline_verifier

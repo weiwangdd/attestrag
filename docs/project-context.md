@@ -71,6 +71,13 @@ Paper outline: https://claude.ai/code/artifact/18317d5d-c295-48fa-afb6-cfa2a69d1
   the shell; a `( ... & )` subshell whose only job is backgrounded gets exec-optimised and the
   parent waits on it (use `setsid nohup ... &`); test nodes must not share a key id (= version
   record) with the production node.
+- 2026-10-28 (TDX): `attestrag/attest/tdx.py`: DCAP v4 quote parser, PCK chain to the pinned Intel SGX
+  Root CA, QE report + quote signatures, Intel PCS TCB info / QE identity (signed JSON, cached),
+  TCB-level / TDX-module / QE matching -> Claims (MRTD = measurement, RTMRs + SEAM in extra, tcb =
+  status rank + SVNs). Real quote from a GCP c3-standard-4 TD (FMSPC 00806f050000, UpToDate) is the
+  golden fixture; demo + KBS/node/client flow ran inside the TD; `policies/gcp-c3-tdx.json`,
+  `deploy/gcp/tdx.md`. A plain C3 (console default) is not a TD: needs `--confidential-compute-type TDX`.
+  Local box (spr-tdx) cannot host TDX (no SEAMRR). Not done: CRLs, RTMR pinning, quote v5, VLEK.
 
 ## Open items / next steps
 1. (done on h200 instead of GCP) GCP N2D path still unexercised; Milan VCEK/ARK untested

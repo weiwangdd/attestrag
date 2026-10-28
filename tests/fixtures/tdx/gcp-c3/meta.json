@@ -1,0 +1,23 @@
+{
+  "label": "attestrag-gcp-c3-tdx-v1-2026-10-28",
+  "report_data": "a39d1baa20774b5dde28d23c5562cd8f253b7b6c0827602f17147ec8be54726e3036ff734a5c5836b35fc7e82d53060a",
+  "mr_td": "f21e6b48743fe14c2d090078ca1197f09ae4c99438677f2c79901ef80e2aeefe2f9a7eb6e3eb3b5047c4f1511731e5d3",
+  "fmspc": "00806f050000",
+  "tcb_status": "UpToDate",
+  "tcb": {
+    "status": 4,
+    "pcesvn": 13,
+    "tdx_module_svn": 15,
+    "tdx_module_major": 1,
+    "qe_svn": 6,
+    "tcb_evaluation": 20
+  },
+  "rtmrs": [
+    "14c3ab8f982e023de8214102f9827f1eef6f65111529aab6ef6dbfc85fabef9c0f27045c1db2ba74efaae1cc4317e054",
+    "e854592cd1ff35823a65dfdab12763d0ce59e1f5e2039d1fc7194b0292415c06193cd732c273bb2d66d92b013eea7400",
+    "1091ae683b2fdddff9e0399221c5c3fad8e891ba6fe69bf56247d2974a73b389c9e5ce7e1a19433ff27747f8c805fdc2",
+    "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  ],
+  "verify_at": 1793199536,
+  "note": "Intel TDX DCAP v4 quote from a Google Cloud c3-standard-4 Confidential VM (Intel TDX, Sapphire Rapids 8481C), Ubuntu 24.04 guest, taken through configfs-tsm (provider tdx_guest, GetQuote TDVMCALL to Google's quote generation service) over report_data = SHA-384(label); PCK chain inside the quote; Intel PCS TCB info and QE identity for the platform's FMSPC cached under pcs/ (verify_at inside their validity window); verified against the pinned Intel SGX Root CA."
+}

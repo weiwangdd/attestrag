@@ -1,0 +1,16 @@
+{
+  "allowed_cpu_platforms": [
+    "tdx"
+  ],
+  "allowed_measurements": [
+    "f21e6b48743fe14c2d090078ca1197f09ae4c99438677f2c79901ef80e2aeefe2f9a7eb6e3eb3b5047c4f1511731e5d3"
+  ],
+  "min_tcb": {
+    "status": 4,
+    "pcesvn": 13,
+    "tdx_module_svn": 15,
+    "qe_svn": 6,
+    "tcb_evaluation": 20
+  },
+  "allow_debug": false
+}

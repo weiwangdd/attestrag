@@ -15,6 +15,7 @@ import sys
 from .attest import AttestationError, CompositeAttester
 from .attest.snp import SnpAttester
 from .attest.nvidia import NvidiaAttester
+from .attest.tdx import TdxAttester
 from .embed import HashingEmbedder, OpenAIEmbedder
 from .generate import OpenAICompatibleGenerator, StubGenerator
 from .index import IndexRollback
@@ -72,8 +73,9 @@ def main(argv: list[str] | None = None) -> None:
                     help="relevance gate: refuse (without calling the generator) when the best chunk scores below this; 0 = off")
     ap.add_argument("--judge", action="store_true",
                     help="relevance gate, stage 2: ask the generator YES/NO whether the context contains the answer before answering")
-    ap.add_argument("--attester", choices=["snp", "mock-insecure"], default="snp",
-                    help="mock-insecure: NO attestation (public mock vendor), for the unprotected baseline in a plain VM only")
+    ap.add_argument("--attester", choices=["snp", "tdx", "mock-insecure"], default="snp",
+                    help="snp: SEV-SNP via configfs-tsm; tdx: Intel TDX quote via configfs-tsm; "
+                         "mock-insecure: NO attestation (public mock vendor), for the unprotected baseline in a plain VM only")
     args = ap.parse_args(argv)
 
     gpus: list[NvidiaAttester] = []
@@ -84,6 +86,8 @@ def main(argv: list[str] | None = None) -> None:
         from .attest.mock import insecure_baseline_attester
         print("[node] WARNING: --attester mock-insecure: this node proves nothing (unprotected baseline)", file=sys.stderr)
         attester = CompositeAttester(insecure_baseline_attester(), gpus)
+    elif args.attester == "tdx":
+        attester = CompositeAttester(TdxAttester(), gpus)
     else:
         attester = CompositeAttester(SnpAttester(), gpus)
     for url in (args.llm, args.embed):

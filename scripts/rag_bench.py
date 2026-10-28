@@ -39,6 +39,7 @@ from pathlib import Path
 
 from attestrag.attest import CompositeVerifier, Platform
 from attestrag.attest.nvidia import NvidiaVerifier
+from attestrag.attest.tdx import PcsClient, TdxVerifier
 from attestrag.attest.snp import KdsClient, SnpVerifier
 from attestrag.policy import Policy
 from attestrag.sdk import AttestRAGClient
@@ -106,6 +107,7 @@ def overlaps(hit: str, passages: list[str], window: int = 120) -> bool:
 # --- client -------------------------------------------------------------------
 def make_client(args) -> tuple[AttestRAGClient, float]:
     verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product),
+                                   Platform.TDX: TdxVerifier(PcsClient()),
                                    Platform.NVIDIA_CC: nvidia_verifier(args)})
     if args.insecure_mock:
         from attestrag.attest.mock import insecure_baseline_verifier

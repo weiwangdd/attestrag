@@ -52,7 +52,9 @@
   `max_age_s` is inert for SNP because `issued_at` is the verification time.
 - The verifier fetches VCEKs from AMD KDS on first sight of a chip/TCB and caches
   them on disk; an offline KBS needs a pre-populated cache.
-- Mock attestation provides **no security**; TDX/NVIDIA verifiers are TODO.
+- Mock attestation provides **no security**.
+- TDX: PCK and root CRLs are not checked; RTMR0-3 are reported, not pinned (MRTD is the
+  measurement the policy pins); quote format 5 is not parsed.
 - SEV-SNP: VLEK-signed reports are rejected (not yet supported); ARK pins are
   compiled in, so an AMD root rotation needs a release. Reports carry no
   timestamp — freshness relies entirely on the single-use KBS nonce. The

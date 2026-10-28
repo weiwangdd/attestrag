@@ -30,13 +30,14 @@ What makes it different:
 > Status: the whole pipeline runs in a measured SEV-SNP VM on a self-hosted EPYC Genoa
 > host with an H200 NVL in confidential-computing mode attached (`deploy/h200`); SNP and
 > NVIDIA evidence (SPDM transcript, AK chain, RIM, OCSP) are verified against real
-> fixtures in `tests/fixtures/`. TDX is a stub (no hardware). Not for production.
+> fixtures in `tests/fixtures/`. Intel TDX (DCAP v4 quotes, Intel PCS) is verified against a real quote
+> from a Google Cloud C3 Confidential VM and the whole flow ran inside that TD. Not for production.
 
 ## Layout
 
 ```
 attestrag/
-  attest/      Attester/Verifier interfaces, CPU<->GPU binding, mock, SEV-SNP (+ bundled AMD roots), TDX stub
+  attest/      Attester/Verifier interfaces, CPU<->GPU binding, mock, SEV-SNP (+ bundled AMD roots), TDX (DCAP v4, PCS), NVIDIA CC
   policy/      evidence claims -> allow/deny (measurement, debug, freshness, min TCB, GPU)
   kbs_client/  TEE-side KBS client + in-process reference KBS (signed releases, index versions, tenant tokens)
   ingest/      parsing + chunking
@@ -122,7 +123,7 @@ sudo python -m attestrag.demo --snp --policy policies/h200-genoa.json
 
 1. ✅ Mock end-to-end: verify → release key → encrypted ingest → retrieve → generate
 2. ✅ SEV-SNP attester + verifier validated on real hardware (EPYC Genoa, `deploy/h200`); reference measurement + policy published (`policies/h200-genoa.json`); GCP N2D still untested
-3. TDX quote verification (DCAP); NVIDIA CC GPU evidence (NRAS / local verifier)
+3. ✅ TDX quote verification (DCAP v4, Intel PCS; GCP C3, `policies/gcp-c3-tdx.json`, `deploy/gcp/tdx.md`); ✅ NVIDIA CC GPU evidence (local verifier, RIM + OCSP)
 4. ✅ HTTP transport: KBS outside the CVM, node inside, CLI client (validated on h200). Trustee KBS integration later
 5. Lean specification of the policy engine; differential testing Python ↔ Lean
 6. ✅ Local models inside the measured CVM image (llama.cpp: Qwen3-Embedding-0.6B + Qwen2.5-1.5B-Instruct, `deploy/h200/guest-llm-setup.sh`); attested remote inference endpoints later

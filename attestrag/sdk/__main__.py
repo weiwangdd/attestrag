@@ -14,6 +14,7 @@ from pathlib import Path
 from ..attest import CompositeVerifier, Platform
 from ..attest.snp import KdsClient, SnpVerifier
 from ..attest.nvidia import NvidiaVerifier
+from ..attest.tdx import PcsClient, TdxVerifier
 from ..policy import Policy
 from . import AttestRAGClient, NodeUntrusted
 from .http import HttpNodeTransport
@@ -33,6 +34,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--policy", required=True, help="policy JSON the client enforces before sending data")
     ap.add_argument("--product", choices=["Milan", "Genoa", "Turin"])
     ap.add_argument("--kds-cache")
+    ap.add_argument("--pcs-cache", help="Intel PCS cache dir (TDX)")
     ap.add_argument("--tenant", default="index-dek", help="tenant (KBS key id) whose index to use (default index-dek)")
     ap.add_argument("--token-file", help="file with the tenant's client token (hex), issued by the KBS operator")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -47,6 +49,7 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
 
     verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product),
+                                   Platform.TDX: TdxVerifier(PcsClient(args.pcs_cache)),
                                    Platform.NVIDIA_CC: nvidia_verifier(args)})
     if args.insecure_mock:
         from ..attest.mock import insecure_baseline_verifier
@@ -61,7 +64,7 @@ def main(argv: list[str] | None = None) -> None:
         print(f"node untrusted, nothing sent: {e}", file=sys.stderr)
         sys.exit(3)
     print(f"node verified: {c.cpu.signer} measurement={c.cpu.measurement[:24]}... tcb={c.cpu.tcb} "
-          f"guest_policy={c.cpu.extra.get('guest_policy')}", file=sys.stderr)
+          f"{'guest_policy=' + str(c.cpu.extra.get('guest_policy')) if 'guest_policy' in c.cpu.extra else 'tcb_status=' + str(c.cpu.extra.get('tcb_status'))}", file=sys.stderr)
     if args.cmd == "verify":
         print(json.dumps({"measurement": c.cpu.measurement, "tcb": c.cpu.tcb, "extra": c.cpu.extra}, indent=2))
     elif args.cmd == "upload":
