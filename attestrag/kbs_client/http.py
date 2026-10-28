@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from ..attest.base import AttestationError
 from ..attest.types import CompositeEvidence
-from ..common.crypto import WrappedKey
 from ..transport import (HttpError, evidence_from_dict, evidence_to_dict, post_json,
                          wrapped_from_dict, wrapped_to_dict)
-from .reference_kbs import KeyReleaseDenied, ReferenceKBS
+from .reference_kbs import KeyRelease, KeyReleaseDenied, ReferenceKBS, VersionCommitRejected
 
 
 class HttpKBS:
@@ -21,7 +20,7 @@ class HttpKBS:
         return bytes.fromhex(post_json(f"{self.base_url}/challenge", {}, self.timeout)["nonce"])
 
     def request_key(self, key_id: str, nonce: bytes, tee_pubkey: bytes,
-                    evidence: CompositeEvidence) -> WrappedKey:
+                    evidence: CompositeEvidence) -> KeyRelease:
         try:
             d = post_json(f"{self.base_url}/key", {
                 "key_id": key_id, "nonce": nonce.hex(), "tee_pubkey": tee_pubkey.hex(),
@@ -31,7 +30,16 @@ class HttpKBS:
             if e.status == 403:
                 raise KeyReleaseDenied(e.reasons or (e.error,)) from None
             raise
-        return wrapped_from_dict(d)
+        return KeyRelease(wrapped_from_dict(d), bytes.fromhex(d.get("signature", "")))
+
+    def commit_version(self, key_id: str, version: int, tag: bytes) -> int:
+        try:
+            d = post_json(f"{self.base_url}/commit", {"key_id": key_id, "version": version, "tag": tag.hex()}, self.timeout)
+        except HttpError as e:
+            if e.status in (403, 409):
+                raise VersionCommitRejected(e.reasons or (e.error,)) from None
+            raise
+        return int(d["version"])
 
 
 def kbs_routes(kbs: ReferenceKBS) -> dict:
@@ -40,12 +48,20 @@ def kbs_routes(kbs: ReferenceKBS) -> dict:
 
     def key(req: dict) -> dict:
         try:
-            w = kbs.request_key(req["key_id"], bytes.fromhex(req["nonce"]),
-                                bytes.fromhex(req["tee_pubkey"]), evidence_from_dict(req["evidence"]))
+            rel = kbs.request_key(req["key_id"], bytes.fromhex(req["nonce"]),
+                                  bytes.fromhex(req["tee_pubkey"]), evidence_from_dict(req["evidence"]))
         except KeyReleaseDenied as e:
             raise HttpError(403, "key release denied", e.reasons) from None
         except AttestationError as e:
             raise HttpError(403, "key release denied", (f"attestation: {e}",)) from None
-        return wrapped_to_dict(w)
+        return {**wrapped_to_dict(rel.wrapped), "signature": rel.signature.hex()}
 
-    return {"/challenge": challenge, "/key": key}
+    def commit(req: dict) -> dict:
+        try:
+            v = kbs.commit_version(req["key_id"], int(req["version"]), bytes.fromhex(req["tag"]))
+        except VersionCommitRejected as e:
+            status = 403 if "tag" in e.reasons[0] else 409
+            raise HttpError(status, "version commit rejected", e.reasons) from None
+        return {"version": v}
+
+    return {"/challenge": challenge, "/key": key, "/commit": commit}

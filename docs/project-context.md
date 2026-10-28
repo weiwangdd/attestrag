@@ -57,6 +57,20 @@ Paper outline: https://claude.ai/code/artifact/18317d5d-c295-48fa-afb6-cfa2a69d1
   llama-chat to `-c 16384 -np 4` (the 4096-token unified KV cache failed under 2 users).
   Concurrency still collapses 3x with 2+ users on CPU (thread oversubscription); options
   listed in the doc. Measurement cae8d72f..., e2e 34/34, 61 tests.
+- 2026-10-28 (step-17): the host between node and KBS could substitute the index key (the
+  release was wrapped to the node's pk but not signed; Tamarin refutes `release_authentic` and
+  `doc_secrecy` in `formal/attestrag_release_unsigned.spthy`). Now: Ed25519-signed releases with
+  the KBS identity pinned in the measured `node.env` (`KBS_PUBKEY`), versioned sealed snapshots
+  with the committed version recorded at the KBS (`/commit`, HMAC under a DEK-derived key, forward
+  only; rolled-back or missing snapshots refused at start, exit 5; `--reset-version` is the
+  operator path), tenants (`--tenant`: own key, own index, client token in the encrypted channel),
+  generator warm-up before listening. Key store format v2 (`kbs-keys.json`: identity, versions,
+  tokens; legacy flat file migrated). Measurement fbe748f7..., e2e 52/52 (impostor KBS, rollback,
+  missing snapshot, two tenants), 106 tests, Tamarin 3 theories / 30 lemmas checked in CI.
+  Pitfalls met again: `pkill -f` on a pattern that appears in the same ssh command line kills
+  the shell; a `( ... & )` subshell whose only job is backgrounded gets exec-optimised and the
+  parent waits on it (use `setsid nohup ... &`); test nodes must not share a key id (= version
+  record) with the production node.
 
 ## Open items / next steps
 1. (done on h200 instead of GCP) GCP N2D path still unexercised; Milan VCEK/ARK untested

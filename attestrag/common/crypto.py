@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 from dataclasses import dataclass
 
@@ -35,6 +36,24 @@ def sha384(*parts: bytes) -> bytes:
 
 def new_key() -> bytes:
     return AESGCM.generate_key(bit_length=256)
+
+
+def mac(key: bytes, *parts: bytes) -> bytes:
+    """HMAC-SHA256 over length-prefixed parts (tenant request authentication, version commits)."""
+    h = hmac.new(key, digestmod=hashlib.sha256)
+    for p in parts:
+        h.update(len(p).to_bytes(8, "big"))
+        h.update(p)
+    return h.digest()
+
+
+def mac_ok(key: bytes, tag: bytes, *parts: bytes) -> bool:
+    return hmac.compare_digest(mac(key, *parts), tag)
+
+
+def subkey(key: bytes, label: bytes) -> bytes:
+    """A purpose-bound key derived from `key` (HKDF-SHA256, no salt); e.g. the commit MAC key from a DEK."""
+    return HKDF(algorithm=hashes.SHA256(), length=KEY_LEN, salt=None, info=label).derive(key)
 
 
 def seal(key: bytes, plaintext: bytes, aad: bytes = b"") -> bytes:

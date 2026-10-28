@@ -1,7 +1,7 @@
 {
-  "label": "attestrag-h200-session-v14-2026-10-28",
-  "nonce": "a64129a9d7b0b0f44a96d3c1b5a8a1958348ed654fea4c21df6b9eedb60b11f6",
-  "node_pub": "f87bac5b2325173d0bc32d721064b1fe5cc434ab22bbcf54d3d3c9189fa08875",
+  "label": "attestrag-h200-session-v15-2026-10-28",
+  "nonce": "5eab2d2cd78e3669c77c67e99d70979872c8da223fb054f96a2e8968c299caa9",
+  "node_pub": "023f54d5042e2337c71c35f41545b8de87ad65401e8c66e7c71df7596fb3ee40",
   "verify_at": 1792836357,
-  "note": "captured through /attestation of the step-16 node (Qwen3-Embedding-0.6B + Qwen2.5-7B, judge gate on) on h200 with H200 NVL GPU3 in CC mode: CPU report_data = SHA-384('attestrag-rd-v2' || nonce || node_pub || gpu_id), gpu_id = SHA-384 of the GPU's AK certificate; verify with CompositeVerifier.verify_for(evidence, nonce, node_pub). verify_at sits inside the validity window of the cached OCSP responses in tests/fixtures/nvidia/h200/ocsp (same GPU, same certificates)."
+  "note": "captured through /attestation of the step-17 node (Qwen3-Embedding-0.6B + Qwen2.5-7B, judge gate on, KBS identity pinned) on h200 with H200 NVL GPU3 in CC mode: CPU report_data = SHA-384('attestrag-rd-v2' || nonce || node_pub || gpu_id), gpu_id = SHA-384 of the GPU's AK certificate; verify with CompositeVerifier.verify_for(evidence, nonce, node_pub). verify_at sits inside the validity window of the cached OCSP responses in tests/fixtures/nvidia/h200/ocsp (same GPU, same certificates)."
 }

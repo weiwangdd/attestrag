@@ -50,6 +50,10 @@ class Answer:
 class Generator(Protocol):
     def generate(self, question: str, hits: list[Hit]) -> Answer: ...
 
+    def warm_up(self) -> None:
+        """One throw-away completion so the first real request does not pay for CUDA/graph initialisation."""
+        ...
+
     def judge(self, question: str, hits: list[Hit]) -> bool:
         """True when the context is judged sufficient to answer; the relevance gate's second stage."""
         ...
@@ -63,6 +67,9 @@ class StubGenerator:
             return Answer("I don't know (no relevant context).", (), "stub")
         best = hits[0]
         return Answer(f"{best.text} [{best.chunk_id}]", (best.chunk_id,), "stub")
+
+    def warm_up(self) -> None:
+        pass
 
     def judge(self, question: str, hits: list[Hit]) -> bool:
         """Offline stand-in: sufficient when the best chunk shares a word of 5+ letters with the question."""
@@ -98,6 +105,18 @@ class OpenAICompatibleGenerator:
         text = data["choices"][0]["message"]["content"]
         cited = tuple(h.chunk_id for h in hits if f"[{h.chunk_id}]" in text)
         return Answer(text, cited, data.get("model", self.model))
+
+    def warm_up(self) -> None:
+        self._chat([{"role": "user", "content": "warm-up"}], max_tokens=1)
+
+    def _chat(self, messages: list[dict], max_tokens: int) -> dict:
+        body = json.dumps({"model": self.model, "messages": messages, "max_tokens": max_tokens, "temperature": 0}).encode()
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        req = urllib.request.Request(f"{self.base_url}/chat/completions", body, headers)
+        with urllib.request.urlopen(req, timeout=self.timeout) as r:
+            return json.load(r)
 
     def judge(self, question: str, hits: list[Hit]) -> bool:
         """One short completion at temperature 0; anything that does not start with YES is a refusal."""

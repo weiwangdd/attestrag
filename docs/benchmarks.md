@@ -208,7 +208,8 @@ its harder noise setting); the remaining fix is a relevance threshold or verifie
 bigger model. Cost: 2.5x the single-user latency and half the 8-user throughput, both still
 far inside the CPU-only envelope (1.4–3.2 s single user, 0.3 q/s at 8 users). The first
 request after model load took 35 s (CUDA warm-up) and is the "max" in `bench-gpu7b-*.json`;
-exclude it when quoting tails.
+exclude it when quoting tails (since step 17 the node sends one throw-away completion before it
+listens, see below).
 
 ### Bigger embedder and generator: Qwen3-Embedding-8B + Qwen2.5-14B (step-13 image, 2026-10-27)
 
@@ -384,6 +385,37 @@ Manifests are immutable per id and OCSP responses are valid for a day, so the co
 paid once per verifier, not per session. A client that skips the services against a policy
 with `require_gpu_ocsp` is refused before it uploads anything (`gpu[0]: certificate
 revocation not checked`).
+
+### Signed release, index versions, tenants: what they cost (step-17 image, 2026-10-28)
+
+Step 17 adds the KBS signature on every key release (checked by the node against the identity
+pinned in its measured `node.env`), a version header on every sealed snapshot with a commit to
+the KBS after each ingest, a per-tenant HMAC on every request, and one throw-away completion
+before the node listens. Same models and gate as step 16 (0.6B embedder, 7B generator, judge
+on), same RGB sweep (`bench-step17.sh`: 100 questions, 20 % held out, 16 unseen questions per
+concurrency level, one attested session per user).
+
+| | step-16 (judge) | step-17 |
+|---|---|---|
+| en: hit@4 / accuracy / held-out rejection | 1.0 / 0.96 / 0.85 | 1.0 / 0.96 / 0.80 |
+| zh: hit@4 / accuracy / held-out rejection | 1.0 / 0.96 / 0.90 | 1.0 / 0.96 / 0.90 |
+| en: single user p50 / p90 / max | 0.41 / 0.59 / 0.64 s | 0.44 / 0.62 / 4.85 s |
+| zh: single user p50 / p90 / max | 0.60 / 0.84 / 1.13 s | 0.61 / 0.85 / 1.17 s |
+| en: 1 / 2 / 4 / 8 users, q/s | 4.2 / – / – / 4.2 | 3.3 / 1.3 / 3.2 / 4.0 |
+| zh: 1 / 2 / 4 / 8 users, q/s | 3.3 / – / – / 3.2 | 1.7 / 3.2 / 3.1 / 3.4 |
+| en: 8 users p50 / p90 | 1.39 / 3.67 s | 1.46 / 2.75 s |
+| zh: 8 users p50 / p90 | 1.96 / 3.11 s | 1.93 / 3.29 s |
+
+Per request nothing changed: the signature and the version commit are per session and per
+ingest, the tenant tag is one HMAC-SHA256 over the ciphertext. The warm-up removed the
+35 s first request of the step-11 run (`max` of the single-user column was the CUDA start;
+now 4.85 s en, 1.17 s zh). What it did not remove is a single 5–8 s request that shows up
+once per run, at the first two-user level in the English sweep (p90 6.8 s, max 8.2 s; the
+step-11 run without the gate had 8.4 s at the same level) and once in the Chinese single-user
+level (max 5.1 s), never at 4 or 8 users. It is one request, not load; the most likely
+cause is the chat server's first use of a second KV-cache slot, which is not yet confirmed.
+Cross-tenant requests are refused before decryption (HTTP 403, `e2e-test.sh` section 6), so a
+wrong token costs one HMAC and no model time. Raw numbers: `bench-step17-{en,zh}_refine.json`.
 
 ## Reproduce
 

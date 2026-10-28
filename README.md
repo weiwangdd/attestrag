@@ -18,14 +18,19 @@ What makes it different:
 - **Clients verify before sending**: the SDK refuses to upload or query until the
   node's evidence is verified against the client's own policy; payloads are
   encrypted to a key bound into the attestation report.
-- **Formal policy (planned)**: the policy engine is a small total function so it
-  can be specified and proved in Lean.
+- **The host cannot swap the key or the index**: the KBS signs every release and the
+  node pins the KBS identity in its measured configuration; sealed snapshots carry a
+  version the KBS records, so a rolled-back or removed index is refused at start.
+- **Tenants**: one key, one sealed index and one client token per tenant on the same
+  node; requests are authenticated under the token inside the encrypted channel.
+- **Formal analysis**: the release protocol in Tamarin (`formal/`, three theories; two
+  attacks found and closed, every verdict re-checked in CI) and the policy function as
+  an executable Lean 4 specification with a differential test against the engine.
 
-> Status: milestone 1 — full flow works locally with **mock** attestation.
-> SEV-SNP attester (configfs-tsm) and verifier (pinned AMD ARK → ASK → VCEK via KDS)
-> are implemented and validated on real hardware (self-hosted EPYC Genoa host, see
-> `deploy/h200`); a real signed report is the golden sample in
-> `tests/fixtures/snp/h200-genoa/`. TDX / NVIDIA CC are placeholders. Not for production.
+> Status: the whole pipeline runs in a measured SEV-SNP VM on a self-hosted EPYC Genoa
+> host with an H200 NVL in confidential-computing mode attached (`deploy/h200`); SNP and
+> NVIDIA evidence (SPDM transcript, AK chain, RIM, OCSP) are verified against real
+> fixtures in `tests/fixtures/`. TDX is a stub (no hardware). Not for production.
 
 ## Layout
 
@@ -33,7 +38,7 @@ What makes it different:
 attestrag/
   attest/      Attester/Verifier interfaces, CPU<->GPU binding, mock, SEV-SNP (+ bundled AMD roots), TDX stub
   policy/      evidence claims -> allow/deny (measurement, debug, freshness, min TCB, GPU)
-  kbs_client/  TEE-side KBS client + in-process reference KBS
+  kbs_client/  TEE-side KBS client + in-process reference KBS (signed releases, index versions, tenant tokens)
   ingest/      parsing + chunking
   embed/       embedders: hashing (tests) or any OpenAI-compatible /v1/embeddings (llama-server in the CVM)
   index/       VectorStore backends: sealed in-memory index (numpy/FAISS) or Qdrant in the CVM (tmpfs storage, sealed snapshots)

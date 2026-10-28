@@ -6,6 +6,7 @@
 #   llama-embed.service   llama-server --embedding, Qwen3-Embedding-0.6B Q8_0, 127.0.0.1:8090
 #   llama-chat.service    llama-server, Qwen2.5-7B-Instruct Q4_K_M (CHAT_MODEL=1.5b for the small one), 127.0.0.1:8091
 #   attestrag-node.service node_server --embed/--llm -> the two above, KBS from /etc/attestrag/node.env
+#                          (KBS_PUBKEY=<hex> pins the KBS identity in node.env; GATE=judge|none)
 #
 # Everything is pinned by sha256 and ends up inside the dm-verity measured image.
 set -euo pipefail
@@ -119,6 +120,11 @@ NODE_ARGS=--embed http://127.0.0.1:8090/v1 --llm http://127.0.0.1:8091/v1 --mode
 ENV
 if [ "$GATE" = judge ]; then grep -q -- '--judge' /etc/attestrag/node.env || sed -i 's|^NODE_ARGS=|NODE_ARGS=--judge |' /etc/attestrag/node.env
 else sed -i 's|--judge ||' /etc/attestrag/node.env; fi
+# KBS identity pin (KBS_PUBKEY = `kbs_server --print-pubkey`): the node refuses key releases not signed by this
+# KBS. Baked into node.env, so the measurement also fixes which KBS the node will take keys from.
+sed -i 's| --kbs-pubkey [0-9a-f]*||' /etc/attestrag/node.env
+if [ -n "${KBS_PUBKEY:-}" ]; then sed -i "s|^NODE_ARGS=\(.*\)\$|NODE_ARGS=\1 --kbs-pubkey $KBS_PUBKEY|" /etc/attestrag/node.env
+else echo "WARNING: KBS_PUBKEY not set: the node will accept key releases from anyone on the KBS path" >&2; fi
 cat /etc/attestrag/node.env
 
 cat > /etc/systemd/system/attestrag-node.service <<UNIT

@@ -33,6 +33,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--policy", required=True, help="policy JSON the client enforces before sending data")
     ap.add_argument("--product", choices=["Milan", "Genoa", "Turin"])
     ap.add_argument("--kds-cache")
+    ap.add_argument("--tenant", default="index-dek", help="tenant (KBS key id) whose index to use (default index-dek)")
+    ap.add_argument("--token-file", help="file with the tenant's client token (hex), issued by the KBS operator")
     sub = ap.add_subparsers(dest="cmd", required=True)
     ap.add_argument("--gpu-rim", action="store_true",
                     help="also check GPU evidence against NVIDIA's reference manifests (RIM service) and OCSP; cached in --nvidia-cache")
@@ -47,10 +49,12 @@ def main(argv: list[str] | None = None) -> None:
     verifier = CompositeVerifier({Platform.SEV_SNP: SnpVerifier(KdsClient(args.kds_cache), product=args.product),
                                    Platform.NVIDIA_CC: nvidia_verifier(args)})
     if args.insecure_mock:
-        from .attest.mock import insecure_baseline_verifier
+        from ..attest.mock import insecure_baseline_verifier
         print("WARNING: --insecure-mock: accepting evidence from the public mock vendor; nothing is protected", file=sys.stderr)
         verifier = CompositeVerifier({**verifier.verifiers, Platform.MOCK_CPU: insecure_baseline_verifier()})
-    client = AttestRAGClient(HttpNodeTransport(args.node), verifier, Policy.from_json(Path(args.policy).read_text()))
+    token = bytes.fromhex(Path(args.token_file).read_text().strip()) if args.token_file else None
+    client = AttestRAGClient(HttpNodeTransport(args.node), verifier, Policy.from_json(Path(args.policy).read_text()),
+                             tenant=args.tenant, token=token)
     try:
         c = client.connect()
     except NodeUntrusted as e:

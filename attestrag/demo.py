@@ -33,7 +33,7 @@ def run_flow(attester: CompositeAttester, verifier: CompositeVerifier, policy: P
     kbs = ReferenceKBS(verifier, policy)
     kbs.put_key("index-dek", new_key())
     with tempfile.TemporaryDirectory() as d:
-        node = AttestRAGNode(attester, KBSClient(kbs, attester), HashingEmbedder(), StubGenerator(), d)
+        node = AttestRAGNode(attester, KBSClient(kbs, attester, kbs_pubkey=kbs.public_key), HashingEmbedder(), StubGenerator(), d)
         node.start()
         rec = kbs.audit[-1]
         print(f"KBS released '{rec.key_id}' to measurement {rec.measurement[:24]}...")

@@ -93,6 +93,41 @@ snapshot with the KBS-released key and writes `qdrant-<collection>.snapshot.enc`
 disk; at start it unseals into `/run/attestrag` (tmpfs) and recovers the collection. A host
 that edits or swaps the file gets an AES-GCM tag failure, and the node refuses to start.
 
+## Signed key release, index versions, tenants (step 17)
+
+Three things the host between node and KBS could do before step 17, and cannot now:
+
+- **Substitute the key.** The release is signed by the KBS identity (Ed25519, kept in
+  `kbs-keys.json`; `kbs_server --print-pubkey`). `guest-llm-setup.sh` writes that public key
+  into `/etc/attestrag/node.env` (`KBS_PUBKEY=<hex>`), so the measurement also fixes which
+  KBS the node takes keys from; a release signed by anyone else is refused (exit 3). Without
+  the pin a host in the middle could wrap a DEK of its own to the node's key and read every
+  sealed snapshot. Tamarin finds that trace in `formal/attestrag_release_unsigned.spthy`.
+- **Roll the index back.** Each sealed snapshot carries its version (authenticated by the
+  AEAD); the KBS keeps the last committed version per key, hands it over with the key, and the
+  node refuses to start on anything older (exit 5, "index rollback detected"). After an ingest
+  the node seals version v+1 and commits it (`/commit`, HMAC under a key derived from the DEK;
+  forward only). A legitimate loss of the index is an operator decision:
+  `kbs_server --reset-version <id>`.
+- **Mix tenants.** `--tenant ID` (repeatable, node and KBS) gives each tenant its own key,
+  its own sealed index (`index-ID.enc` or Qdrant collection `<collection>-ID`) and a client
+  token the KBS writes to `kbs-keys.ID.token`. Every request names the tenant and carries an
+  HMAC under that token over the encrypted payload; the wrap info names the tenant too, so a
+  re-routed request fails even for a tenant without a token.
+
+```
+# host: tenants and identity
+~/snp/venv/bin/python -m attestrag.kbs_server --policy policy-h200.json --keys ~/snp/kbs-keys.json --gpu-rim --tenant acme --tenant globex
+~/snp/venv/bin/python -m attestrag.kbs_server --keys ~/snp/kbs-keys.json --print-pubkey     # -> KBS_PUBKEY for the image
+# guest: node.env NODE_ARGS carries --kbs-pubkey <hex> (baked by guest-llm-setup.sh) and, for tenants, --tenant acme --tenant globex
+# client: that tenant's token
+~/snp/venv/bin/python -m attestrag.sdk --node http://127.0.0.1:8081 --policy policy-h200.json --gpu-rim --tenant acme --token-file ~/snp/kbs-keys.acme.token ask "..."
+```
+
+The node also sends the generator one throw-away completion before it listens, so the first
+real request no longer pays the CUDA warm-up (35 s on the 7B model). `e2e-test.sh` section 6
+exercises all of this on the live VM: impostor KBS, rollback, missing snapshot, two tenants.
+
 ## GPU confidential computing (step 4)
 
 One H200 NVL (GPU3, `0000:44:00.0`) is passed through to the CVM in NVIDIA confidential-computing

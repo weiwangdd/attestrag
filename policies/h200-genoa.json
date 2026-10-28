@@ -3,7 +3,7 @@
     "sev-snp"
   ],
   "allowed_measurements": [
-    "d58aef9d6cf6f9f450b75fe8829e601680e18cfbd485f24357912a8a7dd64a57948fed4e6ec5f30f50e919f38ee1f708"
+    "fbe748f734a3c44eefdc6077882683c1cbc6931d8e32795ad2bb6f68728cead38b2c7c52fc10f7d0aa6b8ec019a18158"
   ],
   "min_tcb": {
     "bootloader": 10,

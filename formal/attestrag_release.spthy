@@ -14,7 +14,10 @@
  *              TEE's attached GPU only ever signs h('gpu', rd) for that TEE's own rd. The adversary
  *              may own certified GPUs too (GPU_Adversary): they sign any nonce it asks for.
  *   KBS      : single-use nonces; releases the DEK wrapped (ECDH + KDF + AEAD) to the pk in the
- *              report, only for the 'good' measurement with a GPU report over h('gpu', rd).
+ *              report, only for the 'good' measurement with a GPU report over h('gpu', rd); the
+ *              release carries the index version the KBS has on record and is SIGNED with the KBS
+ *              identity key, which the good image pins (attestrag-release-v1). After an ingest the
+ *              node seals the index as a new version and commits it with a MAC under the DEK.
  *   Client   : same checks as the KBS, then uploads a document wrapped to pk and asks a question
  *              with a one-time reply key.
  *
@@ -22,8 +25,11 @@
  *   attestrag/attest/binding.py (rd = H(label, nonce, pk); gpu_rd = H(label, rd)),
  *   attestrag/common/crypto.py (wrap_to/unwrap), attestrag/node.py + attestrag/sdk (sessions).
  * Abstractions: hashes as h(), the X25519+HKDF+AES-GCM wrap as aenc(., pk(x)) (only the holder of x
- *   opens it), answers sealed with senc, nonce TTL dropped
- *   (single use is what matters), one DEK, measurements as constants 'good' / other.
+ *   opens it), answers and the sealed index with senc, the commit HMAC as h(<'commit', dek, v>),
+ *   nonce TTL dropped (single use is what matters), one DEK, measurements as constants 'good' / other,
+ *   index versions as fresh names (their order is not modelled, only who may introduce one).
+ *   attestrag_release_unsigned.spthy is this model without the KBS signature: Tamarin finds the
+ *   host-in-the-middle key substitution there (release_authentic, doc_secrecy falsified).
  *
  *   tamarin-prover --prove formal/attestrag_release.spthy
  */
@@ -72,7 +78,7 @@ rule TEE_Attest:
   in
   [ !TEE(m, ~x, ~skg), !GpuCert(pkg, gcert), !PlatformKey(~skP), In(n) ]
   --[ TEEAttest(m, n, pkx), GpuSigned(pkg, grd) ]->
-  [ Out(<n, pkx, rep, pkg, gcert, grep>) ]
+  [ Out(<n, pkx, rep, pkg, gcert, grep>), NodeSess(pkx, n) ]
 
 // An adversary image can put anything into report_data.
 rule TEE_Other_FreeReport:
@@ -100,31 +106,55 @@ rule GPU_Adversary_OtherFirmware:
 
 // ---- key broker -------------------------------------------------------------------------
 rule KBS_Setup:
-  [ Fr(~dek) ] --[ KBSSetup(~dek) ]-> [ !KBSKey(~dek) ]
+  [ Fr(~dek), Fr(~skK), Fr(~v0) ]
+  --[ KBSSetup(~dek) ]->
+  [ !KBSKey(~dek), !KBSSign(~skK), !KBSPub(pk(~skK)), Out(pk(~skK)), !KBSVersion(~dek, ~v0) ]
 
 rule KBS_Challenge:
   [ Fr(~n) ] --[ Challenge(~n) ]-> [ Out(~n), KBSNonce(~n) ]
 
 // request_key: nonce consumed (single use), both signatures over this session's rd, policy
-// 'good' / 'goodgpu', then DEK wrapped to the pk the report vouches for.
+// 'good' / 'goodgpu', then DEK and the committed version wrapped to the pk the report vouches for,
+// the whole release signed by the KBS identity over this session's nonce and pk.
 rule KBS_Release:
   let rd  = h(<'rd', n, pkx, pkg>)
       grd = h(<'gpu', rd>)
+      c   = aenc(<'dek', ~dek, v>, pkx)
   in
-  [ KBSNonce(n), !KBSKey(~dek), !PlatformPub(pkP), !NvidiaPub(pkNV),
+  [ KBSNonce(n), !KBSKey(~dek), !KBSSign(~skK), !KBSVersion(~dek, v), !PlatformPub(pkP), !NvidiaPub(pkNV),
     In(<n, pkx, rep, pkg, gcert, grep>) ]
   --[ Eq(verify(rep, <'report', 'good', rd>, pkP), true),
       Eq(verify(gcert, <'gpucert', pkg>, pkNV), true),
       Eq(verify(grep, <'gpureport', 'goodgpu', grd>, pkg), true),
-      Release(n, pkx, ~dek), AcceptedGpu(n, pkx, pkg) ]->
-  [ Out(aenc(<'dek', ~dek>, pkx)) ]
+      Release(n, pkx, ~dek), ReleaseV(n, pkx, ~dek, v), AcceptedGpu(n, pkx, pkg) ]->
+  [ Out(<c, sign(<'release', n, pkx, c>, ~skK)>) ]
 
+// commit_version: only a holder of the DEK can add a version (HMAC under a key derived from it). The
+// record is a persistent fact: the KBS may release any version it has recorded, since the order of
+// versions is not modelled (a linear record makes the `executable` trace search diverge).
+rule KBS_Commit:
+  [ !KBSKey(~dek), In(<'commit', v2, h(<'commit', ~dek, v2>)>) ]
+  --[ Commit(~dek, v2) ]->
+  [ !KBSVersion(~dek, v2) ]
+
+// the node accepts a release only with the pinned KBS's signature over the nonce it used and its own pk
 rule TEE_Unwrap:
   let pkx = pk(~x)
+      c   = aenc(<'dek', dek, v>, pkx)
   in
-  [ !TEE(m, ~x, ~skg), In(aenc(<'dek', dek>, pkx)) ]
-  --[ NodeGotKey(m, pkx, dek) ]->
+  [ !TEE(m, ~x, ~skg), NodeSess(pkx, n), !KBSPub(pkK), In(<c, sg>) ]
+  --[ Eq(verify(sg, <'release', n, pkx, c>, pkK), true),
+      NodeGotKey(m, pkx, dek), NodeVersion(m, pkx, v) ]->
   [ !NodeKey(m, pkx, dek) ]
+
+// ingest: the document is embedded and the index sealed to the untrusted disk under the DEK as a new
+// version, which the node commits; this is where a substituted DEK would hand the host the documents
+rule TEE_Persist:
+  let pkx = pk(~x)
+  in
+  [ !TEE('good', ~x, ~skg), !NodeKey('good', pkx, dek), In(aenc(<'ingest', doc>, pkx)), Fr(~v2) ]
+  --[ Persist(pkx, doc, ~v2) ]->
+  [ Out(senc(<'index', ~v2, doc>, dek)), Out(<'commit', ~v2, h(<'commit', dek, ~v2>)>) ]
 
 // ---- client sessions --------------------------------------------------------------------
 rule Client_Connect:
@@ -192,9 +222,23 @@ lemma gpu_bound_to_session:
 lemma gpu_is_the_attached_one:
   "All n pkx pkg #i. AcceptedGpu(n, pkx, pkg)@i ==> Ex #j. GpuAttached(pkg, pkx)@j"
 
-// P4  Documents a client uploads after verification are known only to the good TEE.
+// P4  Documents a client uploads after verification are known only to the good TEE (also once the
+//     node has sealed them to the untrusted disk).
 lemma doc_secrecy:
   "All pkx doc #i. Upload(pkx, doc)@i ==> not (Ex #j. K(doc)@j)"
+
+// P6  The key the good node holds is one the KBS released to it in a session it attested: the host
+//     between node and KBS cannot substitute a key of its own (falsified without the KBS signature).
+lemma release_authentic:
+  "All pkx dek #i. NodeGotKey('good', pkx, dek)@i ==> Ex n #j. Release(n, pkx, dek)@j & j < i"
+
+// P6' ... and so is the index version it accepts as the committed one (the rollback floor).
+lemma version_authentic:
+  "All pkx v #i. NodeVersion('good', pkx, v)@i ==> Ex n dek #j. ReleaseV(n, pkx, dek, v)@j & j < i"
+
+// P7  The KBS only ever records a version that the good node sealed and committed.
+lemma commit_authentic:
+  "All dek v #i. Commit(dek, v)@i ==> Ex pkx doc #j. Persist(pkx, doc, v)@j & j < i"
 
 // P5  An answer the client accepts was produced by the good TEE that holds the key.
 lemma answer_authentic:

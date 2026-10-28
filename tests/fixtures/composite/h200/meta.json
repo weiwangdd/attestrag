@@ -1,9 +1,9 @@
 {
-  "label": "attestrag-h200-composite-v14-2026-10-28",
-  "report_data": "ae316a93dced447122752e57560670bde6676149d59818e14e7bccf51c537c5ce1ca06610ad4be9a15df74ebe11a6f96",
-  "gpu_report_data": "f8f605c2a9d314eea08b6df4f28b5a0586a0daccd2b2f33e5fd2816b9102ba477d256a8b5c6cb848a0e0178e409323f6",
-  "snp_measurement": "d58aef9d6cf6f9f450b75fe8829e601680e18cfbd485f24357912a8a7dd64a57948fed4e6ec5f30f50e919f38ee1f708",
-  "note": "bound pair captured inside the SEV-SNP guest on h200 with H200 NVL GPU3 in CC mode (step-10 image, driver 580.178.04): SNP report through configfs-tsm over report_data || 16 zero bytes, GPU SPDM transcript through NVML over the first 32 bytes of gpu_report_data(report_data); the GPU half is bound to the CPU half exactly as the node does it.",
+  "label": "attestrag-h200-composite-v15-2026-10-28",
+  "report_data": "97403137b0e944c42d015ce4e14d09ab0c5bc4045d431a2d536d54754bd226c47d72df14c65d66678ca24e47b16df5bf",
+  "gpu_report_data": "3c8bbc8d327fbaa7ee0eadeda13e794ab5b83afbb1ea87b10e3e1a847ded9f8adf6d618546a5cf98920ad10354a96480",
+  "snp_measurement": "fbe748f734a3c44eefdc6077882683c1cbc6931d8e32795ad2bb6f68728cead38b2c7c52fc10f7d0aa6b8ec019a18158",
+  "note": "bound pair captured inside the SEV-SNP guest on h200 with H200 NVL GPU3 in CC mode (step-17 image, driver 580.178.04): SNP report through configfs-tsm over report_data || 16 zero bytes, GPU SPDM transcript through NVML over the first 32 bytes of gpu_report_data(report_data); the GPU half is bound to the CPU half exactly as the node does it.",
   "verify_at": 1792836357,
   "ocsp_note": "verify_at sits inside the validity window of the cached NVIDIA OCSP responses in tests/fixtures/nvidia/h200/ocsp (2026-10-23 22:05 -> 2026-10-24 22:05 UTC); same GPU, same certificates"
 }

@@ -3,7 +3,7 @@
 Live data lives in the Qdrant process whose storage directory is on tmpfs, i.e. in
 SEV-encrypted guest RAM; nothing of it touches the host-visible disk. Persistence:
 `save()` asks Qdrant for a collection snapshot, seals it (AES-256-GCM with the
-KBS-released index key, AAD binds collection + dim) and writes the ciphertext to the
+KBS-released index key, AAD binds collection + dim + version) and writes the ciphertext to the
 untrusted data disk; `open()` unseals it in memory and uploads it to Qdrant's
 snapshot-recover endpoint. Only the REST API and the standard library are used.
 """
@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ..common.crypto import open_sealed, seal
+from . import check_version, open_versioned, seal_versioned
 
 FORMAT = b"attestrag-qdrant-snapshot-v1"
 POINT_NS = uuid.UUID("1b6d2c7e-3a58-4f1a-9b6a-5f0c9d2e7a11")
@@ -87,7 +87,7 @@ class QdrantStore:
     def _aad(self) -> bytes:
         return FORMAT + b"|" + self.collection.encode() + b"|dim=" + str(self.dim).encode()
 
-    def save(self, path: str | Path, key: bytes) -> None:
+    def save(self, path: str | Path, key: bytes, version: int = 0) -> None:
         name = self._req("POST", f"/collections/{self.collection}/snapshots?wait=true")["result"]["name"]
         try:
             snap = self._req("GET", f"/collections/{self.collection}/snapshots/{name}", raw=True)
@@ -97,15 +97,17 @@ class QdrantStore:
             except QdrantError:
                 pass
         tmp = Path(str(path) + ".tmp")
-        tmp.write_bytes(seal(key, snap, self._aad()))
+        tmp.write_bytes(seal_versioned(key, snap, self._aad(), version))
         tmp.replace(path)
 
-    def open(self, path: str | Path, key: bytes) -> None:
+    def open(self, path: str | Path, key: bytes, min_version: int = 0) -> int:
         path = Path(path)
         if not path.exists():
+            check_version(path, 0, min_version)
             self._ensure_collection()
-            return
-        snap = open_sealed(key, path.read_bytes(), self._aad())   # InvalidTag on tamper / wrong key
+            return 0
+        snap, version = open_versioned(key, path.read_bytes(), self._aad())   # InvalidTag on tamper / wrong key
+        check_version(path, version, min_version)
         boundary = uuid.uuid4().hex
         body = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"snapshot\"; "
                 f"filename=\"{self.collection}.snapshot\"\r\nContent-Type: application/octet-stream\r\n\r\n"
@@ -113,3 +115,4 @@ class QdrantStore:
         self._req("POST", f"/collections/{self.collection}/snapshots/upload?wait=true&priority=snapshot",
                   data=body, content_type=f"multipart/form-data; boundary={boundary}")
         self._ensure_collection()
+        return version

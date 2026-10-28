@@ -11,7 +11,7 @@ Tamarin models of the protocol that `attestrag/kbs_client/reference_kbs.py`, `at
 `formal/prove.sh` (tamarin-prover 1.12, maude 3.5.1; every lemma in its own process with
 `--auto-sources`, 75 s wall on 32 cores for both theories).
 `formal/check.sh` does the same and compares every verdict with `formal/expected.txt` (exit 1 on any
-mismatch; the one expected `falsified` is the attack on the first binding). CI runs it on every push.
+mismatch; the expected `falsified` lines are the two attacks the models are kept for). CI runs it on every push.
 
 ## What is modelled
 
@@ -21,14 +21,16 @@ mismatch; the one expected `falsified` is the attack on the first binding). CI r
 | good TEE | measurement `'good'`; generates its transport key inside; one attached GPU with its own NVIDIA-certified key |
 | other TEE | any other measurement; the adversary learns its key and can put anything into `report_data` |
 | GPU | signs `<'gpureport', firmware, nonce>` for the nonce its driver passes; the good TEE's GPU only for that TEE's `h('gpu', rd)`; adversary-owned certified GPUs sign any nonce; GPUs with other firmware exist |
-| KBS | single-use nonce (consumed even on failure), `rd = h('rd', nonce, pk)`, policy `'good'` / `'goodgpu'`, DEK released as `aenc(DEK, pk)` |
+| KBS | single-use nonce (consumed even on failure), `rd = h('rd', nonce, pk)`, policy `'good'` / `'goodgpu'`, a version record per key, DEK and version released as `aenc(<DEK, v>, pk)` signed by the KBS identity; a commit `<v', h('commit', DEK, v')>` moves the record to `v'` |
+| node | accepts a release only under the pinned KBS identity over its own nonce and pk; after an upload seals the document under the DEK as a fresh version and commits it |
 | client | same verification, document uploaded as `aenc(doc, pk)`, question with a one-time reply key, answer sealed with it |
 | adversary | Dolev-Yao network; runs TEEs with other images; owns certified GPUs |
 
-Abstractions: SHA-384 and HKDF as `h`, the X25519 + HKDF + AES-GCM wrap as asymmetric encryption to
-`pk(x)` (only the holder of `x` opens it), the nonce TTL dropped (single use is the property that
-matters), one DEK, the composite verifier's per-platform checks folded into signature verification
-and the two measurement constants. Not modelled: side channels, physical attacks, firmware bugs
+Abstractions: SHA-384, HKDF and the commit HMAC as `h`, the X25519 + HKDF + AES-GCM wrap as asymmetric
+encryption to `pk(x)` (only the holder of `x` opens it), index versions as fresh names (who may
+introduce one is modelled, their order is not), the nonce TTL dropped (single use is the property
+that matters), one DEK, the composite verifier's per-platform checks folded into signature
+verification and the two measurement constants. Not modelled: side channels, physical attacks, firmware bugs
 (the minimum-TCB policy's domain), the HTTP transport (no TLS; metadata is public anyway).
 
 ## Results
@@ -60,6 +62,27 @@ talks to (in the code: SHA-384 of the GPU's AK certificate, `attest.base.gpu_ide
 over all attached GPUs). Then `gpu_is_the_attached_one` is verified along with the other seven:
 a substituted GPU half no longer matches the CPU report. `tests/test_gpu_identity_binding.py`
 replays the attack against both bindings with mock GPUs.
+
+The same theory now also carries the version record, the signed release, the persistence step and
+the commit (step 17), with three more lemmas:
+
+| lemma | property | `attestrag_release.spthy` | `attestrag_release_unsigned.spthy` |
+|---|---|---|---|
+| `release_authentic` | the key the good TEE holds was released to it by the KBS in a session it attested | verified | **falsified** (6 steps) |
+| `version_authentic` | the version the good TEE accepts as its rollback floor is the one the KBS released to it | verified | **falsified** (6 steps) |
+| `commit_authentic` | the KBS only records a version the good TEE sealed and committed | verified | verified |
+| `doc_secrecy` | (as above, now with the sealed index on the untrusted disk) | verified | **falsified** (15 steps) |
+
+`attestrag_release_unsigned.spthy` is the protocol as deployed before step 17: the release wrapped to
+`pk` but not signed, so the node takes any well-formed `aenc(<DEK, v>, pk)`. The trace: the adversary
+wraps a key of its own to the node's `pk`, the node accepts it, seals the uploaded document under it,
+and the adversary opens the file on the disk it controls. The client's verification of the node is
+no help, since the node is the measured image doing what it was told. The signature over
+`<'release', nonce, pk, blob>` under the KBS identity, which the node pins (in the deployment the public
+key sits in the measured `node.env`), closes it: the signed theory proves all eleven lemmas.
+The version record is a persistent fact (the KBS may release any version it has recorded): with a
+linear record Tamarin's search for the `executable` trace of the signed theory diverges, and the
+lemmas say nothing about the order of versions anyway.
 
 ## Reading the model
 

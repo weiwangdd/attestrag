@@ -1,10 +1,10 @@
 {
-  "note": "Real SEV-SNP report from the h200 host (2x EPYC 9554 Genoa, SEV firmware 1.55 build 42), guest built by deploy/h200 (OVMF.amdsev 2025.11, kernel-hashes, dm-verity root, attestRAG 0.0.1 + HTTP transport in /opt/attestrag, llama.cpp b11753 + Qwen3-Embedding-0.6B Q8_0 + Qwen2.5-7B-Instruct Q4_K_M (8B embedder, 1.5B/14B/80B generators kept) with the judge gate on by default in /opt/llm, Qdrant 1.19.2 in /opt/qdrant, overlayroot=tmpfs:recurse=0, 32 vCPUs / 32 llama threads, chat -c 16384 -np 4, NVIDIA 580 open driver + llama.cpp CUDA build, nvidia-cc-ready unit, swiotlb=262144; captured 2026-10-28 from the step-16 image (GPU identity binding attestrag-rd-v2, 0.6B embedder, 7B generator, judge gate) with H200 NVL GPU3 passed through in CC mode). VCEK fetched from AMD KDS on 2026-10-20; ARK/ASK are the bundled AMD roots.",
+  "note": "Real SEV-SNP report from the h200 host (2x EPYC 9554 Genoa, SEV firmware 1.55 build 42), guest built by deploy/h200 (OVMF.amdsev 2025.11, kernel-hashes, dm-verity root, attestRAG 0.0.1 + HTTP transport in /opt/attestrag, llama.cpp b11753 + Qwen3-Embedding-0.6B Q8_0 + Qwen2.5-7B-Instruct Q4_K_M (8B embedder, 1.5B/14B/80B generators kept) with the judge gate on by default in /opt/llm, Qdrant 1.19.2 in /opt/qdrant, overlayroot=tmpfs:recurse=0, 32 vCPUs / 32 llama threads, chat -c 16384 -np 4, NVIDIA 580 open driver + llama.cpp CUDA build, nvidia-cc-ready unit, swiotlb=262144; captured 2026-10-28 from the step-17 image (GPU identity binding attestrag-rd-v2, 0.6B embedder, 7B generator, judge gate, KBS identity pinned in node.env, versioned sealed index) with H200 NVL GPU3 passed through in CC mode). VCEK fetched from AMD KDS on 2026-10-20; ARK/ASK are the bundled AMD roots.",
   "host": "h200",
   "product": "Genoa",
   "report_version": 5,
-  "report_data": "a01abef01a106ac26e58dce2b90786e713bea68f0b6db8129f2300dbe5622fd80bb207b34b66fb95c8b78b06a49956a0",
-  "measurement": "d58aef9d6cf6f9f450b75fe8829e601680e18cfbd485f24357912a8a7dd64a57948fed4e6ec5f30f50e919f38ee1f708",
+  "report_data": "ef70861f27980f2cc7fb3d8bff3781a4974af145b579d78ea528c52769c43369a28d988d29c28b75a00189d6e346cc0e",
+  "measurement": "fbe748f734a3c44eefdc6077882683c1cbc6931d8e32795ad2bb6f68728cead38b2c7c52fc10f7d0aa6b8ec019a18158",
   "tcb": {
     "bootloader": 10,
     "tee": 0,

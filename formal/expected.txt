@@ -7,6 +7,9 @@ attestrag_release.spthy gpu_bound_to_session verified
 attestrag_release.spthy gpu_is_the_attached_one verified
 attestrag_release.spthy doc_secrecy verified
 attestrag_release.spthy answer_authentic verified
+attestrag_release.spthy release_authentic verified
+attestrag_release.spthy version_authentic verified
+attestrag_release.spthy commit_authentic verified
 attestrag_release_v1.spthy executable verified
 attestrag_release_v1.spthy dek_secrecy verified
 attestrag_release_v1.spthy release_only_to_good_prover verified
@@ -15,3 +18,14 @@ attestrag_release_v1.spthy gpu_bound_to_session verified
 attestrag_release_v1.spthy gpu_is_the_attached_one falsified
 attestrag_release_v1.spthy doc_secrecy verified
 attestrag_release_v1.spthy answer_authentic verified
+attestrag_release_unsigned.spthy executable verified
+attestrag_release_unsigned.spthy dek_secrecy verified
+attestrag_release_unsigned.spthy release_only_to_good_prover verified
+attestrag_release_unsigned.spthy no_replay verified
+attestrag_release_unsigned.spthy gpu_bound_to_session verified
+attestrag_release_unsigned.spthy gpu_is_the_attached_one verified
+attestrag_release_unsigned.spthy doc_secrecy falsified
+attestrag_release_unsigned.spthy answer_authentic verified
+attestrag_release_unsigned.spthy release_authentic falsified
+attestrag_release_unsigned.spthy version_authentic falsified
+attestrag_release_unsigned.spthy commit_authentic verified
