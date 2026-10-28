@@ -1,4 +1,4 @@
-# theory lemma expected-verdict   (checked by formal/check.sh)
+# theory lemma expected-verdict [local-only]   (checked by formal/check.sh; local-only lines are skipped when CI=true)
 attestrag_release.spthy executable verified
 attestrag_release.spthy dek_secrecy verified
 attestrag_release.spthy release_only_to_good_prover verified
@@ -18,7 +18,7 @@ attestrag_release_v1.spthy gpu_bound_to_session verified
 attestrag_release_v1.spthy gpu_is_the_attached_one falsified
 attestrag_release_v1.spthy doc_secrecy verified
 attestrag_release_v1.spthy answer_authentic verified
-attestrag_release_unsigned.spthy executable verified
+attestrag_release_unsigned.spthy executable verified local-only
 attestrag_release_unsigned.spthy dek_secrecy verified
 attestrag_release_unsigned.spthy release_only_to_good_prover verified
 attestrag_release_unsigned.spthy no_replay verified

@@ -82,7 +82,13 @@ no help, since the node is the measured image doing what it was told. The signat
 key sits in the measured `node.env`), closes it: the signed theory proves all eleven lemmas.
 The version record is a persistent fact (the KBS may release any version it has recorded): with a
 linear record Tamarin's search for the `executable` trace of the signed theory diverges, and the
-lemmas say nothing about the order of versions anyway.
+lemmas say nothing about the order of versions anyway. That trace is the expensive one: 58 steps,
+about 5 minutes and 7 GB of memory on a 32-core box, which is why CI proves each theory on its own
+runner with the lemmas in sequence (`ONLY=<theory> JOBS=1 formal/check.sh`). In the unsigned theory
+the same trace search costs 15 minutes and 17 GB (the adversary can wrap anything to the node), more
+than a hosted runner has; that one line of `expected.txt` is marked `local-only` and skipped under
+`CI=true`. Every other lemma of the three theories takes under a minute and 0.3 GB. The unsigned
+model's non-vacuity is shown by its attack traces anyway.
 
 ## Reading the model
 
