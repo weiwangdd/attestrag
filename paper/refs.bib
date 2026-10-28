@@ -168,19 +168,19 @@
 }
 
 @manual{amd2024snpabi,
-  author = {{Advanced Micro Devices}},
+  author = {{AMD}},
   title = {{SEV} Secure Nested Paging Firmware {ABI} Specification},
-  organization = {AMD},
-  note = {Document 56860; revision to be pinned},
-  year = {2024},
+  organization = {Advanced Micro Devices},
+  note = {Document 56860, revision 1.57, January 2025. Attestation report structure, launch measurement, {TCB} versions; the host's firmware 1.55.42 produces report version 5. \url{https://www.amd.com/content/dam/amd/en/documents/epyc-technical-docs/specifications/56860.pdf}},
+  year = {2025},
 }
 
 @manual{nvidia2024cc,
   author = {{NVIDIA}},
-  title = {Confidential Computing Deployment Guide and Attestation {SDK} for {Hopper} and {Blackwell} {GPUs}},
+  title = {{nvTrust}: Trusted Computing Solutions. {Hopper} confidential computing deployment guide and attestation {SDK}},
   organization = {NVIDIA},
-  note = {Document versions to be pinned},
-  year = {2024},
+  note = {nv-attestation-sdk 2.1 ({NRAS} {API} v3); Trusted Computing Solutions release notes for driver R580, August 2025, local {GPU} verifier 2.5. \url{https://github.com/NVIDIA/nvtrust}, \url{https://docs.nvidia.com/attestation/}},
+  year = {2025},
 }
 
 @misc{trustee,
@@ -208,5 +208,76 @@
   author = {{virtee}},
   title = {sev-snp-measure: calculate {AMD} {SEV-SNP} launch measurements},
   howpublished = {\url{https://github.com/virtee/sev-snp-measure}},
+  year = {2025},
+}
+
+@misc{knauth2018ratls,
+  author = {Knauth, Thomas and Steiner, Michael and Chakrabarti, Somnath and Lei, Li and Xing, Cedric and Vij, Mona},
+  title = {Integrating Remote Attestation with Transport Layer Security},
+  howpublished = {arXiv 1801.05863},
+  year = {2018},
+}
+
+@misc{gcp2026confidentialspace,
+  author = {{Google Cloud}},
+  title = {Confidential Space: attestation and provenance for Confidential {VMs}},
+  howpublished = {\url{https://cloud.google.com/confidential-computing/confidential-space/docs}},
+  year = {2026},
+}
+
+@inproceedings{meier2013tamarin,
+  author = {Meier, Simon and Schmidt, Benedikt and Cremers, Cas and Basin, David},
+  title = {The {TAMARIN} Prover for the Symbolic Analysis of Security Protocols},
+  booktitle = {Computer Aided Verification (CAV)},
+  year = {2013},
+}
+
+@inproceedings{cremers2017tls13,
+  author = {Cremers, Cas and Horvat, Marko and Hoyland, Jonathan and Scott, Sam and van der Merwe, Thyla},
+  title = {A Comprehensive Symbolic Analysis of {TLS} 1.3},
+  booktitle = {ACM CCS},
+  year = {2017},
+}
+
+@inproceedings{basin2018fiveg,
+  author = {Basin, David and Dreier, Jannik and Hirschi, Lucca and Radomirovi{\'c}, Sa{\v{s}}a and Sasse, Ralf and Stettler, Vincent},
+  title = {A Formal Analysis of {5G} Authentication},
+  booktitle = {ACM CCS},
+  year = {2018},
+}
+
+@inproceedings{ramsdell2019copland,
+  author = {Ramsdell, John D. and Rowe, Paul D. and Alexander, Perry and Helble, Sarah C. and Loscocco, Peter and Pendergrass, J. Aaron and Petz, Adam},
+  title = {Orchestrating Layered Attestations},
+  booktitle = {Principles of Security and Trust (POST)},
+  year = {2019},
+}
+
+@inproceedings{demoura2021lean4,
+  author = {de Moura, Leonardo and Ullrich, Sebastian},
+  title = {The {Lean} 4 Theorem Prover and Programming Language},
+  booktitle = {Automated Deduction (CADE)},
+  year = {2021},
+}
+
+@inproceedings{parno2011memoir,
+  author = {Parno, Bryan and Lorch, Jacob R. and Douceur, John R. and Mickens, James and McCune, Jonathan M.},
+  title = {Memoir: Practical State Continuity for Protected Modules},
+  booktitle = {IEEE Symposium on Security and Privacy},
+  year = {2011},
+}
+
+@inproceedings{matetic2017rote,
+  author = {Matetic, Sinisa and Ahmed, Mansoor and Kostiainen, Kari and Dhar, Aritra and Sommer, David and Gervais, Arthur and Juels, Ari and Capkun, Srdjan},
+  title = {{ROTE}: Rollback Protection for Trusted Execution},
+  booktitle = {USENIX Security},
+  year = {2017},
+}
+
+@manual{intel2025tdxdcap,
+  author = {{Intel}},
+  title = {Intel {TDX} {DCAP} Quoting Library {API} (quote format version 4) and Provisioning Certification Service {API} v4},
+  organization = {Intel},
+  note = {\url{https://download.01.org/intel-sgx/latest/dcap-latest/linux/docs/}, \url{https://api.portal.trustedservices.intel.com/}},
   year = {2025},
 }

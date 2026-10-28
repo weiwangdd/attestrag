@@ -78,6 +78,11 @@ Paper outline: https://claude.ai/code/artifact/18317d5d-c295-48fa-afb6-cfa2a69d1
   golden fixture; demo + KBS/node/client flow ran inside the TD; `policies/gcp-c3-tdx.json`,
   `deploy/gcp/tdx.md`. A plain C3 (console default) is not a TD: needs `--confidential-compute-type TDX`.
   Local box (spr-tdx) cannot host TDX (no SEAMRR). Not done: CRLs, RTMR pinning, quote v5, VLEK.
+- 2026-10-28 (paper v0.3): abstract/intro aligned with the system (TDX, signed release, versions, two
+  Tamarin-found attacks, 11 lemmas), CI/reproducibility paragraph in section 7 (52 e2e checks), related work
+  expanded (attestation services and key brokers, protocol analysis and executable specs, state continuity),
+  references 20/21 pinned, 26-35 added (RA-TLS, Confidential Space, Tamarin, TLS 1.3, 5G AKA, Copland, Lean 4,
+  Memoir, ROTE, Intel DCAP/PCS); 19 pages. build.py now copies refs.bib on every build (stale copy gave [?]).
 
 ## Open items / next steps
 1. (done on h200 instead of GCP) GCP N2D path still unexercised; Milan VCEK/ARK untested

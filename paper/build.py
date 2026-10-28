@@ -32,6 +32,9 @@ CITE = {
     15: "chen2025algen", 16: "mu2026securerag", 17: "palanisamy2026ragsp", 18: "chen2024rgb",
     19: "rfc9334", 20: "amd2024snpabi", 21: "nvidia2024cc", 22: "trustee", 23: "llamacpp",
     24: "qdrant", 25: "sevsnpmeasure",
+    26: "knauth2018ratls", 27: "gcp2026confidentialspace", 28: "meier2013tamarin", 29: "cremers2017tls13",
+    30: "basin2018fiveg", 31: "ramsdell2019copland", 32: "demoura2021lean4", 33: "parno2011memoir",
+    34: "matetic2017rote", 35: "intel2025tdxdcap",
 }
 
 TABLES = [  # in order of appearance: (float env, column spec, label, caption, lead sentence)
@@ -228,8 +231,7 @@ def main() -> None:
     tex = TEMPLATE % {"title": esc(title), "note": esc(note), "body": body}
     (OUT / "attestrag.tex").write_text(tex)
     for f in ("refs.bib", "usenix2019_v3.sty"):
-        if not (OUT / f).exists():
-            shutil.copy(HERE / f, OUT / f)
+        shutil.copy(HERE / f, OUT / f)   # always: a stale copy leaves new citations as [?]
     tectonic = os.environ.get("TECTONIC") or shutil.which("tectonic")
     if tectonic:
         subprocess.run([tectonic, "--keep-logs", "-o", str(OUT), str(OUT / "attestrag.tex")], check=True)
@@ -237,7 +239,6 @@ def main() -> None:
         for cmd in (["pdflatex", "-interaction=nonstopmode", "attestrag"], ["bibtex", "attestrag"],
                     ["pdflatex", "-interaction=nonstopmode", "attestrag"], ["pdflatex", "-interaction=nonstopmode", "attestrag"]):
             subprocess.run(cmd, cwd=OUT, check=True, capture_output=True)
-    print("wrote", OUT / "attestrag.pdf")
 
 
 if __name__ == "__main__":
