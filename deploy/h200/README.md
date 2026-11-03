@@ -36,6 +36,7 @@ Everything below runs as user `weiwang` without sudo (user in `kvm` group, `/dev
 | `infonly-baseline.sh` (h200 only) | host | the inference-only-TEE baseline: a second plain VM (`VMNAME=plainvm`, own ports and index copy) runs the retrieval side with mock attestation and calls the production CVM's llama-chat over an ssh tunnel; runs RGB, then tears everything down |
 | `gpu3-cc-on.sh` | host (sudo) | put GPU3 (`0000:44:00.0`) into CC mode with NVIDIA's gpu-admin-tools, hand it to `vfio-pci`, open `/dev/vfio/<group>`, `/dev/iommu` and the vfio cdev to the launching user |
 | `gpu3-release-cycle.sh` | host | the unbind only completes once no process holds `/dev/nvidia3`, and every CUDA/NVML process on the host opens all four device nodes: stops the host's GPU services and daemons in order, waits for the detach, starts them again (5–10 min outage of the other three GPUs' services) |
+| `host-gpu-recover.sh` | host | bring host GPUs back after a stuck driver unbind or an NVLink-peer fault: stops the GPU users so pending unbinds finish, re-binds each card (unbind, sysfs FLR, bind when the GSP refuses a plain bind), checks CUDA on every GPU, restarts the services |
 | `guest-snpguest-setup.sh` | guest | download `snpguest` v0.10.0 |
 | `guest-attest.sh` | guest (sudo) | fetch an attestation report through configfs-tsm, no external tools |
 | `guest-verify.sh` | guest | request report, fetch ARK/ASK/VCEK from AMD KDS, verify chain + signature |
@@ -140,6 +141,14 @@ mode; the other three GPUs keep serving the host's own workloads. What it took, 
    stops them, lets the detach finish and restarts them. While the GPU is half-detached, every new
    CUDA process on the host fails with `cudaGetDeviceCount: invalid device ordinal` (NVML counts 4,
    CUDA 3), so the cycle is the only way forward once the switch has started.
+   **The four cards share an NVLink bridge**: every function-level reset of GPU3 (the
+   `--reset-after-cc-mode-switch` of the CC switch) throws `Xid 74, NVLink: fatal error` on the
+   other three. An idle peer only loses CUDA (new contexts fail, vLLM reports `num_gpus=1`), a busy
+   one escalates to Xid 119 (GSP timeout) and Xid 154 (GPU Reset Required); on 2026-10-27 that left
+   GPU0/1 dead for a week. So never switch CC mode or reset GPU3 outside a maintenance window, and
+   follow every such reset with `host-gpu-recover.sh` for the peers (a card in "Reset Required"
+   refuses a plain driver bind with `RmInitAdapter failed 0x62:0x40:2028`; the script unbinds,
+   resets it through sysfs and binds again, then restarts the services). Keep CC on GPU3 on.
 2. **Launch**: `GPU=0000:44:00.0 ./launch-snpvm.sh snp` (or `GPU=... bash relaunch.sh`). The
    additions, each the fix for a failure on the way:
    `-cpu EPYC-v4,host-phys-bits=on` (a 512 GB hole needs more than the model's 40 physical bits;
