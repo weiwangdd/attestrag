@@ -1,8 +1,8 @@
 # deploy/h200: SEV-SNP confidential VM on the h200 host
 
-State of the h200 host (quadtopus, Gigabyte G494-ZB4-AAP2, 2x EPYC 9554, 4x H200 NVL) as of 2026-10-19.
+State of the h200 host (Gigabyte G494-ZB4-AAP2, 2x EPYC 9554, 4x H200 NVL) as of 2026-10-19.
 Host side: BIOS SEV-SNP enabled, kernel 7.0.0-38 HWE, NVIDIA open driver 580.178.04, `kvm_amd sev_snp=Y`.
-Everything below runs as user `weiwang` without sudo (user in `kvm` group, `/dev/sev` is 0660 root:kvm via udev rule).
+Everything below runs as an unprivileged user without sudo (user in `kvm` group, `/dev/sev` is 0660 root:kvm via udev rule).
 
 ## Layout on h200 (`~/snp`)
 

@@ -26,7 +26,7 @@ for m in 80b 14b 7b 1.5b; do run_model cvm $m policy-h200.json "--gpu-rim"; done
 echo "===== phase B: plain VM + GPU in normal mode ====="
 pkill -f "[q]emu-system-x86_64 -name snpvm" || true; sleep 3
 sudo -n python3 $T --devices 44:00.0 --set-cc-mode=off --reset-after-cc-mode-switch 2>&1 | grep -iE "cc mode is|error" | tail -1
-sudo -n chown weiwang /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null; sudo -n chmod 660 /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null
+sudo -n chown "$USER" /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null; sudo -n chmod 660 /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null
 P=$(ss -ltnp 2>/dev/null | grep ":8800 " | sed -E 's/.*pid=([0-9]+).*/\1/'); [ -n "$P" ] && kill "$P"; sleep 1
 nohup venv/bin/python -m attestrag.kbs_server --policy policies-insecure-baseline.json --keys kbs-keys.json --listen 127.0.0.1:8800 --insecure-mock > kbs.log 2>&1 < /dev/null &
 GPU=0000:44:00.0 setsid nohup ./launch-snpvm.sh plain </dev/null > snpvm.console.log 2>&1 &
@@ -39,7 +39,7 @@ for m in 80b 14b 7b 1.5b; do run_model plain $m policies-insecure-baseline.json 
 echo "===== restore: CC on, production relaunch ====="
 pkill -f "[q]emu-system-x86_64 -name snpvm" || true; sleep 3
 sudo -n python3 $T --devices 44:00.0 --set-cc-mode=on --reset-after-cc-mode-switch 2>&1 | grep -iE "cc mode is|error" | tail -1
-sudo -n chown weiwang /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null; sudo -n chmod 660 /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null
+sudo -n chown "$USER" /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null; sudo -n chmod 660 /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null
 GPU=0000:44:00.0 bash relaunch.sh 2>&1 | grep -E "kbs up|qemu up|released|allowed=" | head -4
 $G "nvidia-smi conf-compute -q | grep -E 'CC State|Ready'"
 echo "SCALE-DONE $(date +%T)"

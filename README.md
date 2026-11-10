@@ -130,4 +130,6 @@ sudo python -m attestrag.demo --snp --policy policies/h200-genoa.json
 
 ## License
 
+Apache-2.0 (see `LICENSE`). Security reports: see `SECURITY.md`; contributions: `CONTRIBUTING.md`.
+
 Apache-2.0

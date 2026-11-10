@@ -1,7 +1,7 @@
 # AttestRAG — project context (handoff, 2026-10-15)
 
 Summary of the confidential-RAG discussion and development so far. Code:
-github.com/weiwangdd/attestrag (private), local clone `~/src/attestRAG`. Updated 2026-10-20.
+github.com/weiwangdd/attestrag, local clone `~/src/attestRAG`. Updated 2026-10-20.
 
 ## Idea
 Open-source, end-to-end **attestable RAG** deployed into the customer's own cloud
@@ -77,7 +77,7 @@ Paper outline: https://claude.ai/code/artifact/18317d5d-c295-48fa-afb6-cfa2a69d1
   status rank + SVNs). Real quote from a GCP c3-standard-4 TD (FMSPC 00806f050000, UpToDate) is the
   golden fixture; demo + KBS/node/client flow ran inside the TD; `policies/gcp-c3-tdx.json`,
   `deploy/gcp/tdx.md`. A plain C3 (console default) is not a TD: needs `--confidential-compute-type TDX`.
-  Local box (spr-tdx) cannot host TDX (no SEAMRR). Not done: CRLs, RTMR pinning, quote v5, VLEK.
+  The local Xeon Max box cannot host TDX (no SEAMRR). Not done: CRLs, RTMR pinning, quote v5, VLEK.
 - 2026-10-28 (paper v0.3): abstract/intro aligned with the system (TDX, signed release, versions, two
   Tamarin-found attacks, 11 lemmas), CI/reproducibility paragraph in section 7 (52 e2e checks), related work
   expanded (attestation services and key brokers, protocol analysis and executable specs, state continuity),

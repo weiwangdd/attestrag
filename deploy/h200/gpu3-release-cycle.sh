@@ -1,6 +1,6 @@
 #!/bin/bash
 # h200: release /dev/nvidia3 so the pending unbind of GPU3 completes, then bring every GPU service back.
-# Run as weiwang (sudo -n works). Order matters: nothing may reopen /dev/nvidia3 before the driver drops it.
+# Run as the user who launches the VM (sudo -n must work). Order matters: nothing may reopen /dev/nvidia3 before the driver drops it.
 set -u
 USER_UNITS="vllm-deepseek vllm-embed vllm-qwen3vl30b"
 echo "== $(date +%T) stop GPU daemons and all GPU services"

@@ -20,7 +20,7 @@ echo "== $(date +%T) P: stop production guest, GPU3 CC off"
 stop_vm
 sudo -n python3 $T --devices 44:00.0 --set-cc-mode=off --reset-after-cc-mode-switch 2>&1 | grep -iE "cc mode|error" | tail -2
 sudo -n python3 $T --devices 44:00.0 --query-cc-mode 2>&1 | grep -iE "CC mode is" | tail -1
-sudo -n chown weiwang /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null; sudo -n chmod 660 /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null
+sudo -n chown "$USER" /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null; sudo -n chmod 660 /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null
 kbs policies-insecure-baseline.json --insecure-mock
 GPU=0000:44:00.0 setsid nohup ./launch-snpvm.sh plain </dev/null > snpvm.console.log 2>&1 &
 wait_guest || return 1
@@ -49,7 +49,7 @@ echo "== $(date +%T) R: GPU3 back to CC mode, production relaunch"
 stop_vm
 sudo -n python3 $T --devices 44:00.0 --set-cc-mode=on --reset-after-cc-mode-switch 2>&1 | grep -iE "cc mode|error" | tail -2
 sudo -n python3 $T --devices 44:00.0 --query-cc-mode 2>&1 | grep -iE "CC mode is" | tail -1
-sudo -n chown weiwang /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null; sudo -n chmod 660 /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null
+sudo -n chown "$USER" /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null; sudo -n chmod 660 /dev/vfio/32 /dev/iommu /dev/vfio/devices/vfio* 2>/dev/null
 GPU=0000:44:00.0 bash relaunch.sh 2>&1 | grep -E "kbs up|qemu up|index has|allowed=" | head -4
 ./g "nvidia-smi conf-compute -q | grep -E 'CC State|Ready'; systemctl is-active attestrag-node"
 echo "A1-DONE $(date +%T)"

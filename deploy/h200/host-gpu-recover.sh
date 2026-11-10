@@ -14,7 +14,7 @@
 #
 # Usage: bash host-gpu-recover.sh [bdf ...]      e.g. 0000:03:00.0 0000:04:00.0
 #   no argument = every NVIDIA GPU that currently has no driver bound (the zombies; the vfio-pci GPU
-#   of the CVM is bound and therefore never touched). Runs as weiwang (sudo -n). ~5 min outage.
+#   of the CVM is bound and therefore never touched). Runs as the user who launches the VM (sudo -n). ~5 min outage.
 set -u
 USER_UNITS=${USER_UNITS:-"vllm-deepseek vllm-embed vllm-qwen3vl30b funasr-nano"}
 DAEMONS=${DAEMONS:-"nvidia-dcgm nvidia-persistenced"}
