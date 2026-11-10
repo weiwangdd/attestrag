@@ -8,6 +8,10 @@ generation — runs inside a CPU confidential VM (AMD SEV-SNP / Intel TDX).
 Generation uses either a local small model in the same CVM or an attested
 inference API.
 
+![AttestRAG pipeline: the client SDK verifies the composite evidence, the confidential VM with the H200 in CC mode runs ingest, embedding, index, retrieval and generation, the KBS in the customer's trust domain releases the index key](paper/figures/pipeline.png)
+
+*One composite proof covers the whole pipeline: the SNP report of the VM and the attestation transcript of the GPU attached to it. The node proves itself to the KBS before it receives any key; the client verifies the same composite evidence before it uploads. (Figure 1 of the [paper draft](paper/usenix/attestrag.pdf).)*
+
 What makes it different:
 
 - **CPU + GPU composite attestation**: GPU evidence is bound to the CPU report

@@ -116,7 +116,7 @@ TIKZ = r"""\begin{figure*}[t]\centering
   \node[stage, below=of retrieve] (gen) {generate (llama.cpp, CUDA)};
   \node[gpu, right=10mm of index, text width=3.6cm, minimum height=22mm]
     (gpunode) {\textbf{H200 in CC mode}\\[1pt] \scriptsize passed through to this VM; SPDM-protected PCIe, bounce buffers; attestation transcript via NVML};
-  \node[vm, fit=(ingest)(gen)(gpunode), label={[font=\small\bfseries]above:confidential VM (SEV-SNP; TDX \textbf{[design]})}] (cvm) {};
+  \node[vm, fit=(ingest)(gen)(gpunode), label={[font=\small\bfseries]above:confidential VM (SEV-SNP / TDX)}] (cvm) {};
   \node[stage, left=14mm of index, text width=3.2cm, minimum height=22mm, align=left]
     (client) {\textbf{client SDK}\\[1pt] 1. verify composite evidence against the policy\\ 2. upload, encrypted to the node key\\ 3. open the sealed answer};
   \node[stage, fill=blue!5, minimum width=9.5cm, minimum height=9mm, below=12mm of gen, align=center]
